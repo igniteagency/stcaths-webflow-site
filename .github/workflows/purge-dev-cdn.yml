@@ -1,0 +1,32 @@
+name: Purge Dev Branch jsDelivr Cache
+
+on:
+  push:
+    branches:
+      - dev
+
+jobs:
+  purge-dev:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Generate List of Dev Branch JS Files to Purge
+        id: generate_purge_list
+        shell: bash
+        run: |
+          dev_base_url="https://cdn.jsdelivr.net/gh/${{ github.repository }}@dev"
+          urls=""
+          if [ -d "dist/prod" ]; then
+            for file in $(find dist/prod -type f -name "*.js"); do
+              urls+="${dev_base_url}/${file},"
+            done
+          fi
+          urls=${urls%,}  # Remove trailing comma
+          echo "urls=$urls" >> $GITHUB_OUTPUT
+
+      - name: Purge jsDelivr Cache for Dev Branch
+        uses: egad13/purge-jsdelivr-cache@v1
+        with:
+          url: ${{ steps.generate_purge_list.outputs.urls }}

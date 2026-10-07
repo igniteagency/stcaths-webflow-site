@@ -1,0 +1,38 @@
+{
+  "name": "webflow-js-starter",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.2.7",
+  "main": "src/entry.js",
+  "module": "src/entry.js",
+  "files": ["dist"],
+  "author": "parasshah195",
+  "scripts": {
+    "dev": "cross-env NODE_ENV=development bun run ./bin/build.js",
+    "build": "cross-env NODE_ENV=production bun run ./bin/build.js"
+  },
+  "devDependencies": {
+    "@finsweet/eslint-config": "^3.0.3",
+    "@finsweet/tsconfig": "^1.4.2",
+    "@trivago/prettier-plugin-sort-imports": "^5.2.2",
+    "@typescript-eslint/eslint-plugin": "^8.43.0",
+    "@typescript-eslint/parser": "^8.43.0",
+    "@types/jquery": "^3.5.33",
+    "browserslist": "^4.25.4",
+    "browserslist-to-esbuild": "^2.1.1",
+    "cross-env": "^10.0.0",
+    "esbuild": "^0.25.9",
+    "eslint": "^9.35.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.4",
+    "gsap": "^3.13.0",
+    "prettier": "^3.6.2",
+    "swiper": "^11.2.10",
+    "tiny-glob": "^0.2.9",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@finsweet/ts-utils": "^0.40.0"
+  }
+}
