@@ -9,7 +9,7 @@ test('Starter production loads its default main-branch CDN bundle', () => {
   assert.doesNotMatch(entrySource, /getProductionBase\(['"]dev['"]\)/);
   assert.match(
     entrySource,
-    /https:\/\/cdn\.jsdelivr\.net\/gh\/igniteagency\/webflow-js-starter-new\/dist\/prod\//
+    /https:\/\/cdn\.jsdelivr\.net\/gh\/igniteagency\/stcaths-webflow-site\/dist\/prod\//
   );
   assert.match(entrySource, /window\.PRODUCTION_BASE = getProductionBase\(\);/);
 });

@@ -1,13 +1,15 @@
 {
-  "name": "webflow-js-starter",
+  "name": "stcaths-webflow-site",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.2.7",
   "main": "src/entry.js",
   "module": "src/entry.js",
-  "files": ["dist"],
-  "author": "parasshah195",
+  "files": [
+    "dist"
+  ],
+  "author": "IGNITE",
   "scripts": {
     "dev": "cross-env NODE_ENV=development bun run ./bin/build.js",
     "build": "cross-env NODE_ENV=production bun run ./bin/build.js"

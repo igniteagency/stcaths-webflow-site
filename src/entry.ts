@@ -20,7 +20,7 @@ export interface ScriptOptions {
 }
 
 function getProductionBase() {
-  return 'https://cdn.jsdelivr.net/gh/igniteagency/webflow-js-starter-new/dist/prod/';
+  return 'https://cdn.jsdelivr.net/gh/igniteagency/stcaths-webflow-site/dist/prod/';
 }
 
 window.PRODUCTION_BASE = getProductionBase();

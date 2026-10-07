@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "webflow-js-starter",
+      "name": "stcaths-webflow-site",
       "dependencies": {
         "@finsweet/ts-utils": "^0.40.0",
       },
