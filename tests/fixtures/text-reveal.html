@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>St Catherine’s text reveal regression fixture</title>
+    <style>
+      @font-face {
+        font-family: Reveal QA;
+        src: url('/qa-font.woff2') format('woff2');
+        font-display: swap;
+      }
+      body {
+        margin: 24px;
+        font:
+          20px/1.5 'Reveal QA',
+          sans-serif;
+      }
+      .column {
+        width: 100%;
+        max-width: 620px;
+      }
+      h1,
+      h2,
+      p {
+        font-weight: 400;
+        margin: 0 0 24px;
+      }
+      h1,
+      h2 {
+        font-size: 32px;
+        line-height: 1.25;
+      }
+      .balance {
+        text-wrap: balance;
+      }
+      .pretty {
+        text-wrap: pretty;
+      }
+      #offscreen {
+        margin-top: 1800px;
+      }
+    </style>
+    <script src="/gsap.js"></script>
+  </head>
+  <body>
+    <main class="column" role="main">
+      <h1 id="balance" class="balance">
+        St Catherine’s School inspires girls to shape their future
+      </h1>
+      <p id="pretty" class="pretty">
+        Discover a learning community where curiosity, confidence and opportunity help every student
+        grow and find her own path.
+      </p>
+      <span id="label-source">The authored accessible name</span>
+      <h2
+        id="authored"
+        aria-label="Authored label"
+        aria-labelledby="label-source"
+        aria-hidden="false"
+        role="heading"
+        data-author="keep"
+        data-split="authored"
+        style="color: rgb(24, 40, 60); --chars: 77; --lines: 9; text-decoration: underline"
+      >
+        Learning at St Catherine’s
+      </h2>
+      <h2 id="plain">Curiosity &amp; possibility</h2>
+      <h2 id="at-hidden" aria-hidden="true">An intentionally hidden accessible heading</h2>
+      <div id="hidden-parent" style="display: none">
+        <h2 id="hidden">A hidden heading ready to reveal</h2>
+      </div>
+      <div id="visibility-parent" style="visibility: hidden">
+        <h2 id="visibility">Visibility controlled heading</h2>
+      </div>
+      <div id="zero-parent" style="width: 0"><h2 id="zero">Zero width heading</h2></div>
+      <h2 id="rich">Keep <em>authored emphasis</em> intact</h2>
+      <h2 id="link">Keep the <a href="#plain">school link</a> intact</h2>
+      <h2 id="accessible-child">
+        Keep <span aria-label="Accessible child name">this child</span> intact
+      </h2>
+      <h2 id="focusable" tabindex="0">An interactive heading</h2>
+      <a href="#plain"><h2 id="nested-link">Heading inside a link</h2></a>
+      <h2 id="editable" contenteditable="true">Editable heading</h2>
+      <h2 id="button-role" role="button">Button role heading</h2>
+      <div id="nonsemantic">A nonsemantic text container</div>
+      <h2 id="offscreen">A heading below the viewport</h2>
+    </main>
+    <script>
+      const native = new Map();
+      const observers = [];
+      const tweens = [];
+      const gsapIdentity = window.gsap;
+      const fromTo = gsap.fromTo;
+      const requested = new URLSearchParams(location.search);
+      gsap.fromTo = function (...args) {
+        const tween = fromTo.apply(this, args);
+        if (!requested.has('live')) tween.pause();
+        tweens.push(tween);
+        return tween;
+      };
+      for (const name of ['IntersectionObserver', 'ResizeObserver', 'MutationObserver']) {
+        const Native = window[name];
+        window[name] = class extends Native {
+          targets = new Set();
+          constructor(...args) {
+            super(...args);
+            // Playwright's injected polling also creates observers; track only the component.
+            if (new Error().stack.includes('/dist/prod/components/text-reveal.js')) {
+              observers.push(this);
+            }
+          }
+          observe(target, ...args) {
+            this.targets.add(target);
+            return super.observe(target, ...args);
+          }
+          unobserve(target) {
+            this.targets.delete(target);
+            return super.unobserve(target);
+          }
+          disconnect() {
+            this.targets.clear();
+            return super.disconnect();
+          }
+        };
+      }
+      function paintedLines(element) {
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        const rows = [];
+        let node;
+        while ((node = walker.nextNode())) {
+          for (let index = 0; index < node.length; index++) {
+            const range = document.createRange();
+            range.setStart(node, index);
+            range.setEnd(node, index + 1);
+            const rect = range.getBoundingClientRect();
+            if (!rect.width || !rect.height) continue;
+            let row = rows.find((row) => Math.abs(row.top - rect.top) < 2);
+            if (!row) {
+              row = { top: rect.top, text: '', left: rect.left, right: rect.right };
+              rows.push(row);
+            }
+            row.text += node.textContent[index];
+            row.left = Math.min(row.left, rect.left);
+            row.right = Math.max(row.right, rect.right);
+          }
+        }
+        return rows.map((row) => ({ ...row, text: row.text.replace(/\s+/g, ' ').trim() }));
+      }
+      window.fixture = {
+        tweens,
+        native,
+        paintedLines,
+        prepare(ids) {
+          for (const id of ids) {
+            const el = document.getElementById(id);
+            el.setAttribute('data-text-reveal', 'chars');
+            native.set(id, {
+              html: el.outerHTML,
+              nodes: [...el.childNodes],
+              lines: paintedLines(el),
+              height: el.getBoundingClientRect().height,
+            });
+          }
+        },
+        load() {
+          return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = '/dist/prod/components/text-reveal.js';
+            script.onload = resolve;
+            script.onerror = reject;
+            document.body.append(script);
+          });
+        },
+        restored(ids) {
+          return ids.every((id) => {
+            const el = document.getElementById(id);
+            const before = native.get(id);
+            return (
+              el.outerHTML === before.html &&
+              [...el.childNodes].every((node, i) => node === before.nodes[i])
+            );
+          });
+        },
+        clean() {
+          return observers.every((observer) => observer.targets.size === 0);
+        },
+        sameGSAP() {
+          return window.gsap === gsapIdentity;
+        },
+      };
+    </script>
+  </body>
+</html>

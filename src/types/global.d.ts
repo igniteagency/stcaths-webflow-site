@@ -43,6 +43,8 @@ declare global {
 
   /** Global window types */
   interface Window {
+    gsap: typeof GSAP;
+    stCathsTextReveal?: { init(root?: ParentNode): void };
     Webflow: Webflow;
     WF_IX: Webflow_IX3;
 

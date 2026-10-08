@@ -96,6 +96,97 @@ The project will process and output the files mentioned in the `files` const of 
 - Browsers without native named-details support receive a scoped `toggle` fallback.
 - Disclosure animation belongs to progressive-enhancement CSS in Webflow, not JavaScript.
 
+### Opt-in letter reveal (St Catherine’s only)
+
+```html
+<h2 data-text-reveal="chars">A place to discover her potential</h2>
+<p data-text-reveal="chars">A short introduction written as plain text.</p>
+```
+
+`global.js` conditionally loads `components/text-reveal.js` when this hook exists. Only that bundle
+contains [Kugiri](https://raw.githubusercontent.com/edoardolunardi/kugiri/main/README.md), pinned to
+0.5.3 with Bun. It uses St Catherine’s existing CDN-provided `window.gsap`; it does not load or bundle
+another GSAP or SplitText. Have the existing GSAP global available before component initialization.
+There is no Webflow/CSS change or automatic opt-in for existing headings.
+
+- Only static, plain-text `h1`–`h6` and `p` elements qualify. All child elements (including links,
+  emphasis, icons, `<br>`, and accessible spans), interactive targets/ancestors, editable content,
+  and non-text roles are skipped. Do not opt in text with programmatic interaction handlers.
+- Native text stays visible while waiting for a positive viewport intersection, a measurable box,
+  and `document.fonts.ready`. Hidden, `display:none`, zero-width and offscreen targets stay unsplit.
+  Pending targets observe size and visibility attributes on their ancestors until they activate.
+- The one-time reveal animates character opacity and vertical offset using GSAP for at most one
+  second. Kugiri measures the browser’s existing line breaks, including `text-wrap: balance/pretty`.
+  Completion restores original text nodes and authored attributes, including inline styles and
+  `data-split`. A viewport resize or target-width change mid-animation cancels, restores, and never
+  replays; native text can then reflow normally.
+- Headings retain their original accessible name, respecting authored `aria-label` and
+  `aria-labelledby`. Generated lines/characters are hidden from assistive technology. Paragraphs
+  retain one visually hidden native text alternative during the animation because paragraph roles
+  cannot be named with `aria-label`. Authored `role`, `aria-hidden` and other data/ARIA remain intact.
+- Reduced motion skips the reveal initially and cancels both active and pending reveals if enabled
+  later. Missing GSAP/observer support, split errors or tween errors leave natural text. Completed,
+  skipped and canceled elements do not replay. Observers/listeners are removed on completion,
+  cancellation or page exit; pending hidden targets remain watched until then.
+
+The component initializes itself on execution. Repeated execution and repeated calls are idempotent,
+including while fonts are pending. For newly inserted opt-in content:
+
+```js
+await window.loadScript('components/text-reveal.js');
+window.stCathsTextReveal?.init(container); // optional root; defaults to document; includes root itself
+```
+
+There is no replay API or continuous DOM discovery. Avoid changing text, its inline style, font, or
+ARIA during the one-second reveal: the original text/style snapshot is restored. Character boxes
+temporarily lose cross-letter kerning, ligatures and connected-script shaping. Kugiri also prevents
+page translation on split lines until restoration. Use sparingly on short copy; verify the actual
+site typography in Safari/Firefox as well as Chromium. Transitions/animations that hide a target
+without changing its box or observed attributes are outside this hook’s activation contract.
+
+#### Reveal regression checks
+
+```sh
+bun install --frozen-lockfile
+bun test
+bunx --no-install tsc --noEmit
+bun run build
+bun run qa:text-reveal
+```
+
+The focused unit suite uses controlled split/GSAP/observer doubles for lifecycle failures. The
+executable `bin/qa-text-reveal.mjs` serves the **actual `dist/prod` component**, real GSAP from the
+existing dev dependency, and `tests/fixtures/text-reveal.html` on an ephemeral localhost port. It
+uses an available Playwright module, without installing a browser or test framework. If Playwright
+is outside this checkout, point `PLAYWRIGHT_MODULE` at its absolute `index.mjs`; optionally point
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE` at an installed Chromium/Chrome executable. For this workstation:
+
+```sh
+PLAYWRIGHT_MODULE=/Users/iggy/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs \
+PLAYWRIGHT_CHROMIUM_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+TEXT_REVEAL_EVIDENCE_DIR=/tmp/text-reveal-evidence \
+bun run qa:text-reveal
+```
+
+QA fetches a pinned Open Sans Latin WOFF2 from Google Fonts, serves it locally and deliberately gates
+its first load to check font readiness. Set `TEXT_REVEAL_FONT_PATH` to a local copy of that font for
+offline runs. The script checks 360/768/1280px balance/pretty line breaks and geometry; actual
+accessibility-tree names and paragraph text; exact completion restoration; viewport/container
+resize; initial/live reduced motion; display/visibility/zero-width/offscreen activation; repeated
+initialization and dynamic roots; unsafe markup; missing GSAP/observers; forced split/tween failures;
+and real-time completion. Most cases pause real GSAP tweens for deterministic inspection. Each case
+also checks observer cleanup and browser errors where applicable. A failed launch or assertion exits
+nonzero. Do not bypass MachPort/OS sandbox launch failures: Hermes should run QA outside the coding
+sandbox. A blocked launch is **not** a passing browser test.
+
+Optional `TEXT_REVEAL_EVIDENCE_DIR` saves screenshots, full Chromium AX trees (`.ax.json`), and
+measured tween/character state (`.state.json`) at 35% progress and after exact restoration at
+360/768/1280px. These use the actual split nodes and GSAP tweens. `run-result.json` records the
+bundle hash, browser version, scenario outcomes, evidence paths, and any failure; failed scenarios
+also attempt a diagnostic capture. Separate restoration cases avoid reading host attributes while
+split, so evidence collection cannot mask CSSOM's deferred `style` serialization. Real-time
+completion covers both headings and paragraphs at mobile and desktop widths.
+
 ### Switching tabs
 
 `Section / Switching Tabs` nests each panel `details` so they are not direct siblings. `details.ts` therefore cannot exclusive-group them. `global.js` loads `components/switching-tabs.js` when the component is on the page.
