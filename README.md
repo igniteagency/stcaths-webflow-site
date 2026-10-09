@@ -313,6 +313,34 @@ dependency fallbacks. It never seeks or pauses the WAAPI animations. Browser che
 until that runner passes; a sandbox denial is a failure record, not a pass, and must not be retried
 inside the coding sandbox.
 
+### Navigation wordmark
+
+`Section / Navbar` adds `data-nav-wordmark=""` to the existing logo wrapper, alongside
+`data-hero-intro-nav="brand"`. Its existing style embed owns the readiness flag
+`--nav-wordmark-motion: 1`, visible SVG overflow, the per-part translate rule, and
+hidden/pointer states. `global.js` loads `components/nav-wordmark.js` independently
+of the text engine.
+
+The controller separates the authored compound SVG path into nineteen letters/punctuation
+marks and the establishment line without changing its contours. Letter counters and the
+dotted i stay together; the footer logo is outside this scope. If replacement artwork
+cannot be grouped safely, it stays native.
+
+Match the concept: hide after 660px on a downward scroll, rise 50 screen pixels with
+0.006s stagger and `power3.out`, 0.55s exit and 0.5s return per part. Accumulated upward
+travel of 12px returns the wordmark; 580px is the near-top return boundary. Interrupted
+motion continues from its current position. The hero arrival still belongs to the outer
+wrapper. Menu/search scroll locking pauses direction tracking. A focused home link stays
+visible, hidden states are inert, and reduced motion restores the authored SVG and home
+link without scroll hiding.
+
+`bun run qa:nav-wordmark` checks Home and Why St Catherine’s at four widths, pixel-identical
+SVG rendering, partial stagger frames, direction jitter, interruptions, menu use, focus,
+resize, history restoration, reduced motion and missing-script/style fallbacks. For local
+preview set `WORDMARK_BEFORE_EMBED_PATH` and `WORDMARK_EMBED_PATH` to temporary exports
+outside this repository. `WORDMARK_LIVE=1 WORDMARK_QUICK=1` checks the published desktop
+and mobile pages without overrides. Set `WORDMARK_EVIDENCE_DIR` for evidence output.
+
 ### Hero intro
 
 `components/hero-intro.js` joins the existing `Global / Intro Loader — Circle` CSS clock.

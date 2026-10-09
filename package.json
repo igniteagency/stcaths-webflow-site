@@ -19,7 +19,8 @@
     "qa:hero-intro": "node ./bin/qa-hero-intro.mjs",
     "qa:statistics": "node ./bin/qa-statistics.mjs",
     "qa:divider": "node ./bin/qa-divider.mjs",
-    "qa:footer": "node ./bin/qa-footer.mjs"
+    "qa:footer": "node ./bin/qa-footer.mjs",
+    "qa:nav-wordmark": "node ./bin/qa-nav-wordmark.mjs"
   },
   "devDependencies": {
     "@finsweet/eslint-config": "^3.0.3",
