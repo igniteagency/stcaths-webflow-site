@@ -393,6 +393,34 @@ native navigation at 1440/820/667/390px. `MENU_EVIDENCE_DIR` selects the screens
 `MENU_WIDTH` optionally selects one width. Re-run without browser overrides after the approved
 GitHub merge and Webflow publish to verify deployment.
 
+### Academic results
+
+`global.js` loads `components/statistics.js` when `[data-statistics]` is present.
+Each `[data-statistic-value]` rolls its digits once when at least half visible,
+matching the Astro concept: one revolution plus the final digit, 1800ms plus 90ms
+per digit, a 70ms digit stagger, and `cubic-bezier(.22,.68,0,1)` easing.
+Decimal points and percentage units stay still. Values come from the authored text.
+
+In Webflow's `Element / Academic Results`, the `academic-results_component` list
+has `data-statistics=""` and each of the three `academic-results_value` elements
+has `data-statistic-value=""`. Its `component-style` embed owns the measured reel
+overlays, clipping and edge fade, source visibility, reduced-motion fallback and
+`--statistic-motion: 1` readiness flag. No stylesheet is stored in this repository.
+
+The original text retains layout and accessibility throughout; decorative reels
+are hidden from assistive technology. Completion restores the same original DOM
+nodes. Reduced motion skips the animation; resizing, late fonts, page exit or
+enabling reduced motion settles running values immediately. Missing CSS or JS
+leaves the native values readable.
+
+`bun run qa:statistics` checks four responsive widths, accessibility, original-node
+restoration, repeat scrolling, interruption and missing-dependency fallbacks on the
+real page with local JS overrides. Set `STATISTICS_COMPONENT_EMBED_PATH` to a
+temporary export of the component's Webflow embed outside this repository for
+unpublished styles. `STATISTICS_EVIDENCE_DIR` selects output; `STATISTICS_WIDTH`
+limits the run to one width. Browser paths use `PLAYWRIGHT_MODULE` and
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE`. The runner does not edit or publish Webflow.
+
 ### Switching tabs
 
 `Section / Switching Tabs` nests each panel `details` so they are not direct siblings. `details.ts` therefore cannot exclusive-group them. `global.js` loads `components/switching-tabs.js` when the component is on the page.
