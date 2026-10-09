@@ -167,8 +167,13 @@ try {
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await open.click();
     await page.waitForTimeout(250);
+    await page.evaluate(() => {
+      window.menuResizeObserved = new Promise((resolve) => {
+        window.addEventListener('resize', () => queueMicrotask(resolve), { once: true });
+      });
+    });
     await page.setViewportSize({ width: width + 2, height: 960 });
-    await page.waitForTimeout(50);
+    await page.evaluate(() => window.menuResizeObserved);
     assert.equal((await state()).splits, 0, 'Resize restores readable labels');
     await summary.click();
     await page.waitForTimeout(80);
