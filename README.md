@@ -347,8 +347,9 @@ native menu. Reduced motion skips transitions; enabling it or resizing mid-trans
 readable text and settles the requested submenu. Native Escape/close interrupts immediately;
 the CSS exit retains the painted surface without delaying native focus restoration. Reopening
 starts at the main menu. Text is restored after each reveal and recreated on the next interaction.
-The controller lets two animation frames settle after a details state change before asking the text factory to
-measure its newly paintable contents.
+The controller conceals the incoming panel while two animation frames settle after a details state
+change and the text factory prepares its measurable contents. It removes that temporary mask only
+when the incoming animation is ready, preventing a flash of unanimated text.
 
 Run `bun run qa:nav-menu` with Playwright available via `PLAYWRIGHT_MODULE` and a Chrome executable
 via `PLAYWRIGHT_CHROMIUM_EXECUTABLE`. The runner opens the real published homepage in an isolated

@@ -20,6 +20,7 @@ function initMenu(menu: HTMLElement) {
   let selected = groups.find((group) => group.open);
   let generation = 0;
   let handles: TextRevealHandle[] = [];
+  let preparation: ReturnType<Window['gsap']['set']> | undefined;
   let animation:
     | ReturnType<Window['gsap']['timeline']>
     | ReturnType<Window['gsap']['to']>
@@ -32,6 +33,8 @@ function initMenu(menu: HTMLElement) {
     pendingSwap = undefined;
     animation?.revert();
     animation = undefined;
+    preparation?.revert();
+    preparation = undefined;
     handles.forEach((handle) => handle.revert());
     handles = [];
     text!.dispose(list!);
@@ -53,6 +56,8 @@ function initMenu(menu: HTMLElement) {
     if (reduced.matches || !popover!.matches(':popover-open')) return;
     const current = generation;
     try {
+      // Conceal the incoming panel while keeping its text measurable for splitting.
+      preparation = gsap.set(list, { clipPath: 'inset(0 0 100% 0)' });
       await document.fonts.ready;
       // Let native details visibility and scrollbar layout settle before measuring its labels.
       await new Promise<void>((resolve) =>
@@ -109,6 +114,8 @@ function initMenu(menu: HTMLElement) {
             at
           );
       });
+      preparation.revert();
+      preparation = undefined;
       timeline.play();
     } catch (error) {
       if (current === generation) cancel(true);
