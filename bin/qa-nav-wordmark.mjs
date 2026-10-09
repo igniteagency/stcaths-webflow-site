@@ -97,6 +97,24 @@ async function state(page) {
     })),
   }));
 }
+async function partial(page, phase) {
+  const frame = await page.waitForFunction((phase) => {
+    const brand = document.querySelector('[data-nav-wordmark]');
+    const values = [...brand.querySelectorAll('[data-nav-wordmark-part]')].map((p) => ({
+      opacity: +getComputedStyle(p).opacity,
+      y: p.style.getPropertyValue('--nav-wordmark-y'),
+      transform: getComputedStyle(p).transform,
+    }));
+    if (
+      brand.dataset.navWordmarkState !== phase ||
+      !values.some((p) => p.opacity > 0 && p.opacity < 1) ||
+      new Set(values.map((p) => p.opacity)).size < 4
+    )
+      return false;
+    return { state: phase, inert: brand.inert, aria: brand.getAttribute('aria-hidden'), values };
+  }, phase);
+  return frame.jsonValue();
+}
 async function wait(page, value) {
   await page.waitForFunction(
     (value) => document.querySelector('[data-nav-wordmark]').dataset.navWordmarkState === value,
@@ -152,8 +170,7 @@ try {
       await scroll(page, 640);
       assert.equal((await state(page)).state, 'visible');
       await scroll(page, 800);
-      await page.waitForTimeout(140);
-      const hiding = await state(page);
+      const hiding = await partial(page, 'hiding');
       assert.equal(hiding.state, 'hiding');
       assert(hiding.inert);
       assert(hiding.values.some((p) => p.opacity > 0 && p.opacity < 1));
@@ -169,8 +186,7 @@ try {
       await scroll(page, 800);
       assert.equal((await state(page)).state, 'hidden');
       await scroll(page, 780);
-      await page.waitForTimeout(130);
-      const showing = await state(page);
+      const showing = await partial(page, 'showing');
       assert.equal(showing.state, 'showing');
       assert(!showing.inert);
       assert.equal(showing.aria, null);
