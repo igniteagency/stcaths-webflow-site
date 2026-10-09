@@ -77,6 +77,31 @@ The project will process and output the files mentioned in the `files` const of 
 
    **Do not use the old `window.JS_SCRIPTS` set or batch loading. Use `window.loadScript` for all dynamic script loading.**
 
+### Capability portrait panels
+
+`components/portrait-scroll.js` coordinates **Section / Editorial Portrait Scroll** after the
+shared text engine loads. The section root carries `data-portrait-scroll=""` and
+`data-text-trigger="manual"`; the component's Webflow embed owns its state CSS and
+`--portrait-motion: 1` readiness flag. Remove the former inline portrait-scroll script when
+installing this controller so only one controller owns the panels.
+
+On desktop (at least 992px wide and 621px high), scroll selects a panel every 80vh. The
+outgoing text fades for 200ms, incoming headings and paragraphs start their shared reveals
+at 220ms, and the existing 950ms image slide starts at 300ms. Each image transition finishes
+before catching up to the latest scroll destination. Reverse scrolling reverses the image
+direction. Pending text masks release to `clip-path: none`; the action fades in over 200ms.
+
+Inactive panels are inert and hidden from assistive technology. Mobile, short viewports,
+oversized copy and reduced motion retain complete articles in normal flow. Static-layout
+text reveals per target as it enters the viewport; reduced motion remains unanimated.
+Keyboard focus, resizing and page restoration settle unfinished transitions safely.
+
+Run `bun run qa:portrait-scroll` with `PORTRAIT_BEFORE_EMBED_PATH` and `PORTRAIT_EMBED_PATH`
+pointing to temporary exports outside this repo for preview checks. Set `PORTRAIT_LIVE=1`
+for published-site checks without overrides; `PORTRAIT_EVIDENCE_DIR` selects the output folder.
+The browser checks cover intermediate frames, forward/reverse/rapid scroll, responsive
+interruption, four responsive widths, reduced motion, short viewports and missing assets.
+
 ### Native details groups
 
 `global.js` automatically treats any parent with two or more direct-child `<details>` elements as one exclusive disclosure group. No activation attribute is required.

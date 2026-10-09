@@ -20,7 +20,8 @@
     "qa:statistics": "node ./bin/qa-statistics.mjs",
     "qa:divider": "node ./bin/qa-divider.mjs",
     "qa:footer": "node ./bin/qa-footer.mjs",
-    "qa:nav-wordmark": "node ./bin/qa-nav-wordmark.mjs"
+    "qa:nav-wordmark": "node ./bin/qa-nav-wordmark.mjs",
+    "qa:portrait-scroll": "node ./bin/qa-portrait-scroll.mjs"
   },
   "devDependencies": {
     "@finsweet/eslint-config": "^3.0.3",
