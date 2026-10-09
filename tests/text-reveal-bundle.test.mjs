@@ -5,7 +5,10 @@ import test from 'node:test';
 
 test('global selector stays shared and lightweight; only the component bundles Kugiri and none bundle GSAP', async () => {
   const globalSource = await readFile(new URL('../src/global.ts', import.meta.url), 'utf8');
-  assert.match(globalSource, /querySelector\(TEXT_REVEAL_SELECTOR \+ ',\[data-menu-motion\]'\)/);
+  assert.match(
+    globalSource,
+    /querySelector\(TEXT_REVEAL_SELECTOR \+ ',\[data-menu-motion\],\[data-hero-intro\]'\)/
+  );
   const settings = await readFile(
     new URL('../src/utils/text-motion-settings.ts', import.meta.url),
     'utf8'
@@ -18,6 +21,7 @@ test('global selector stays shared and lightweight; only the component bundles K
       'src/global.ts',
       'src/components/text-reveal.ts',
       'src/components/nav-menu.ts',
+      'src/components/hero-intro.ts',
     ],
     bundle: true,
     write: false,

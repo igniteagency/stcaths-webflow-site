@@ -129,7 +129,7 @@ every individual refresh, including targets registered after page load; its uppe
 pixel before maximum scroll so `onEnter` can fire. Preparation checks the trigger’s actual numeric
 start and scroll position. Footer text therefore reveals at maximum scroll without a bottom spacer. H1 follows exactly the same rule; any measurable target already past that threshold
 starts after fonts are ready without another scroll. Content stays native until preparation.
-The text-reveal component itself has **no** page-load/hero, menu-open, dialog, click or custom-event animation bindings. The separate navigation-menu controller below uses its manual factory.
+The text-reveal component itself has **no** page-load/hero, menu-open, dialog, click or custom-event animation bindings. The separate hero-intro and navigation-menu controllers below use its manual factory.
 
 Opt out on an element, section, or page; these also block manual `create()`:
 
@@ -312,6 +312,36 @@ activation, restoration/identity, replay, reduced motion, touch, cancellation, d
 dependency fallbacks. It never seeks or pauses the WAAPI animations. Browser checks remain pending
 until that runner passes; a sandbox denial is a failure record, not a pass, and must not be retried
 inside the coding sandbox.
+
+### Hero intro
+
+`components/hero-intro.js` joins the existing `Global / Intro Loader — Circle` CSS clock.
+The one-second crest ring and expanding aperture stay in that component's Webflow embed.
+The heading and brand arrive at 1.65s, menu at 1.75s, and supporting text/actions at 1.85s.
+Heading and supporting text use the shared manual text factory; navbar arrivals and the
+preparation masks are CSS in the loader embed. No stylesheet is stored in this repository.
+
+| Webflow element | Attribute |
+| --- | --- |
+| Intro loader root (keep its authored `is-active` class) | `data-hero-intro=""` |
+| Section / Hero root | `data-hero-intro-content=""` |
+| Navbar logo wrapper | `data-hero-intro-nav="brand"` |
+| Native menu trigger | `data-hero-intro-nav="menu"` |
+| Navbar action wrapper | `data-hero-intro-nav="actions"` |
+
+Before automatic text registration, `global.ts` marks the hero as manual only on pages with
+the loader. Other hero instances keep their normal text behavior. A second font-loading event
+can reprepare text before its reveal; the loader's completion does not depend on text handles
+surviving that event. Late fonts or scripts use the readable CSS fallback without replaying.
+Reduced motion, fragment links and history restoration skip the controlled sequence. Pointer,
+keyboard, scrolling, resizing and page exit restore the native content immediately.
+
+`bun run qa:hero-intro` checks four responsive sizes and interruption/fallback scenarios on the
+real page with local JS overrides. Set `HERO_COMPONENT_EMBED_PATH` to a temporary export of the
+Webflow loader embed outside the repository when testing unpublished styles. `HERO_EVIDENCE_DIR`
+selects the evidence directory; `HERO_WIDTH` limits the run to one responsive size. Browser paths
+use the same `PLAYWRIGHT_MODULE` and `PLAYWRIGHT_CHROMIUM_EXECUTABLE` options as the other runners.
+The runner does not publish or edit Webflow.
 
 ### Navigation menu transitions
 
