@@ -15,7 +15,8 @@
     "build": "cross-env NODE_ENV=production bun run ./bin/build.js",
     "qa:text-reveal": "node ./bin/qa-text-reveal.mjs",
     "qa:button-text": "node ./bin/qa-button-text.mjs",
-    "qa:nav-menu": "node ./bin/qa-nav-menu.mjs"
+    "qa:nav-menu": "node ./bin/qa-nav-menu.mjs",
+    "qa:hero-intro": "node ./bin/qa-hero-intro.mjs"
   },
   "devDependencies": {
     "@finsweet/eslint-config": "^3.0.3",

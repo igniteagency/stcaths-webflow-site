@@ -36,10 +36,16 @@ function initComponents() {
 function UIFunctions() {
   duplicateMarqueeList();
   initDetailsGroups();
+  if (document.querySelector('[data-hero-intro]')) {
+    document
+      .querySelector('[data-hero-intro-content]')
+      ?.setAttribute('data-text-trigger', 'manual');
+  }
   window.conditionalLoadScript('.button_link', 'components/button-text.js');
-  if (document.querySelector(TEXT_REVEAL_SELECTOR + ',[data-menu-motion]')) {
+  if (document.querySelector(TEXT_REVEAL_SELECTOR + ',[data-menu-motion],[data-hero-intro]')) {
     void window
       .loadScript('components/text-reveal.js')
+      .then(() => window.conditionalLoadScript('[data-hero-intro]', 'components/hero-intro.js'))
       .then(() => window.conditionalLoadScript('[data-menu-motion]', 'components/nav-menu.js'))
       .catch((error) => console.error('Text motion unavailable:', error));
   }
