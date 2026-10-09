@@ -78,6 +78,12 @@ document.querySelectorAll('[data-footer-reveal]').forEach((footer) => {
       if (finished) return handle?.revert();
       // Release the preparation mask entirely before any glyph starts rising.
       footer.setAttribute('data-footer-state', 'playing');
+      if (getComputedStyle(footer).position === 'sticky') {
+        rules.forEach((rule) => {
+          if (rule.getAttribute('data-divider-state') === 'pending')
+            rule.setAttribute('data-divider-state', 'revealing');
+        });
+      }
       if (!handle) return footer.setAttribute('data-footer-state', 'complete');
       timeline = window.gsap.timeline({
         onComplete: () => {
@@ -157,6 +163,8 @@ document.querySelectorAll('[data-footer-reveal]').forEach((footer) => {
     rule.addEventListener('animationcancel', settle, options);
     watch(rule, () => {
       if (finished || revealed) return;
+      // Sticky rules join the prepared heading's clock, after async text splitting.
+      if (getComputedStyle(footer).position === 'sticky') return;
       revealed = true;
       rule.setAttribute('data-divider-state', 'revealing');
     });
