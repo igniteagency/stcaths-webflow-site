@@ -42,12 +42,16 @@
       }
     </style>
     <script src="/gsap.js"></script>
+    <script src="/ScrollTrigger.js"></script>
   </head>
   <body>
-    <main class="column" role="main">
+    <header class="column">
       <h1 id="balance" class="balance">
         St Catherine’s School inspires girls to shape their future
       </h1>
+    </header>
+    <main id="main" class="column" role="main" tabindex="-1">
+      <div id="eyebrow" class="text-style-eyebrow">Learning for life</div>
       <p id="pretty" class="pretty">
         Discover a learning community where curiosity, confidence and opportunity help every student
         grow and find her own path.
@@ -74,7 +78,10 @@
         <h2 id="visibility">Visibility controlled heading</h2>
       </div>
       <div id="zero-parent" style="width: 0"><h2 id="zero">Zero width heading</h2></div>
-      <h2 id="rich">Keep <em>authored emphasis</em> intact</h2>
+      <h2 id="rich">
+        Keep <em>authored <strong>emphasis</strong></em
+        ><br />and natural line breaks intact
+      </h2>
       <h2 id="link">Keep the <a href="#plain">school link</a> intact</h2>
       <h2 id="accessible-child">
         Keep <span aria-label="Accessible child name">this child</span> intact
@@ -84,14 +91,67 @@
       <h2 id="editable" contenteditable="true">Editable heading</h2>
       <h2 id="button-role" role="button">Button role heading</h2>
       <div id="nonsemantic">A nonsemantic text container</div>
+      <div class="w-richtext" id="rich-container">
+        <p id="linked-paragraph">
+          Explore
+          <a href="#plain"
+            >our school and its extraordinary learning community with many opportunities</a
+          >
+          through <em>curiosity and care</em>.
+        </p>
+        <p id="identity-paragraph">
+          Retain
+          <strong id="identity-strong" tabindex="-1" name="authored-name">the same node</strong> and
+          listeners.
+        </p>
+        <blockquote id="quote-container">
+          <p id="quote-leaf">A quote with a paragraph leaf and <em>emphasis</em>.</p>
+        </blockquote>
+        <blockquote id="quote-direct" style="text-indent: 28px">
+          Direct quote text flows naturally across several lines, with indentation only on its first
+          painted line.
+        </blockquote>
+        <ul>
+          <li id="list-direct">A list item with <strong>authored strong text</strong>.</li>
+          <li id="list-container"><p id="list-leaf">A list item containing a paragraph.</p></li>
+        </ul>
+        <p id="media">
+          <img
+            alt="Static image"
+            width="32"
+            height="24"
+            src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='24'/%3E"
+          />
+        </p>
+        <table id="table">
+          <tr>
+            <td><p id="table-text">Table text stays native</p></td>
+          </tr>
+        </table>
+      </div>
+      <section data-text-reveal="off">
+        <h2 id="inherited-off">Inherited section opt-out</h2>
+      </section>
+      <h2 id="element-off" data-text-reveal="off">Element opt-out</h2>
+      <section data-no-heading-motion><p id="legacy-off">Legacy opt-out</p></section>
+      <div data-text-trigger="manual"><h2 id="manual">Manually reusable heading</h2></div>
+      <nav>
+        <a id="menu-anchor" href="#plain"
+          ><span id="menu-label" data-text-trigger="manual">Discover<br />our school</span></a
+        >
+      </nav>
+      <button><span id="button-eyebrow" class="eyebrow">Button label</span></button>
       <h2 id="offscreen">A heading below the viewport</h2>
     </main>
+    <footer><p id="footer-copy">A school community beyond the main element.</p></footer>
     <script>
       const native = new Map();
       const observers = [];
+      const listeners = [];
       const tweens = [];
       const gsapIdentity = window.gsap;
       const fromTo = gsap.fromTo;
+      const scrollTriggerIdentity = window.ScrollTrigger;
       const requested = new URLSearchParams(location.search);
       gsap.fromTo = function (...args) {
         const tween = fromTo.apply(this, args);
@@ -124,6 +184,23 @@
           }
         };
       }
+      const addListener = EventTarget.prototype.addEventListener;
+      const removeListener = EventTarget.prototype.removeEventListener;
+      EventTarget.prototype.addEventListener = function (type, listener, options) {
+        // Count direct component subscriptions, not GSAP's internals or Playwright's pollers.
+        const caller = new Error().stack?.split('\n')[2] ?? '';
+        if (caller.includes('/dist/prod/components/text-reveal.js')) {
+          listeners.push({ target: this, type, listener });
+        }
+        return addListener.call(this, type, listener, options);
+      };
+      EventTarget.prototype.removeEventListener = function (type, listener, options) {
+        const index = listeners.findIndex(
+          (entry) => entry.target === this && entry.type === type && entry.listener === listener
+        );
+        if (index >= 0) listeners.splice(index, 1);
+        return removeListener.call(this, type, listener, options);
+      };
       function paintedLines(element) {
         const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
         const rows = [];
@@ -137,31 +214,61 @@
             if (!rect.width || !rect.height) continue;
             let row = rows.find((row) => Math.abs(row.top - rect.top) < 2);
             if (!row) {
-              row = { top: rect.top, text: '', left: rect.left, right: rect.right };
+              row = { top: rect.top, text: '', left: rect.left, right: rect.right, glyphs: [] };
               rows.push(row);
             }
-            row.text += node.textContent[index];
+            const char = node.textContent[index];
+            row.text += char;
+            if (!/\s/.test(char))
+              row.glyphs.push({ char, top: rect.top, left: rect.left, right: rect.right });
             row.left = Math.min(row.left, rect.left);
             row.right = Math.max(row.right, rect.right);
           }
         }
         return rows.map((row) => ({ ...row, text: row.text.replace(/\s+/g, ' ').trim() }));
       }
+      function hierarchy(node) {
+        return { node, value: node.nodeValue, children: [...node.childNodes].map(hierarchy) };
+      }
+      function sameHierarchy(before) {
+        return (
+          before.node.nodeValue === before.value &&
+          before.node.childNodes.length === before.children.length &&
+          before.children.every(
+            (child, index) => before.node.childNodes[index] === child.node && sameHierarchy(child)
+          )
+        );
+      }
+      function remember(ids) {
+        for (const id of ids) {
+          const el = document.getElementById(id);
+          native.set(id, {
+            html: el.outerHTML,
+            hierarchy: hierarchy(el),
+            lines: paintedLines(el),
+            height: el.getBoundingClientRect().height,
+          });
+        }
+      }
       window.fixture = {
         tweens,
         native,
         paintedLines,
+        remember,
         prepare(ids) {
-          for (const id of ids) {
-            const el = document.getElementById(id);
-            el.setAttribute('data-text-reveal', 'chars');
-            native.set(id, {
-              html: el.outerHTML,
-              nodes: [...el.childNodes],
-              lines: paintedLines(el),
-              height: el.getBoundingClientRect().height,
-            });
+          const all = [
+            ...document.querySelectorAll(
+              'h1,h2,h3,h4,h5,h6,p,li,blockquote,.text-style-eyebrow,.eyebrow,[data-el="eyebrow"],#menu-label'
+            ),
+          ];
+          if (ids) {
+            const chosen = ids.map((id) => document.getElementById(id));
+            for (const el of all) {
+              if (!chosen.some((target) => el === target || el.contains(target)))
+                el.setAttribute('data-text-reveal', 'off');
+            }
           }
+          remember(ids ?? all.filter((el) => el.id).map((el) => el.id));
         },
         load() {
           return new Promise((resolve, reject) => {
@@ -176,17 +283,19 @@
           return ids.every((id) => {
             const el = document.getElementById(id);
             const before = native.get(id);
-            return (
-              el.outerHTML === before.html &&
-              [...el.childNodes].every((node, i) => node === before.nodes[i])
-            );
+            return el.outerHTML === before.html && sameHierarchy(before.hierarchy);
           });
         },
         clean() {
-          return observers.every((observer) => observer.targets.size === 0);
+          return (
+            observers.every((observer) => observer.targets.size === 0) &&
+            listeners.length === 0 &&
+            tweens.every((tween) => !tween.parent) &&
+            (!window.ScrollTrigger || ScrollTrigger.getAll().length === 0)
+          );
         },
         sameGSAP() {
-          return window.gsap === gsapIdentity;
+          return window.gsap === gsapIdentity && window.ScrollTrigger === scrollTriggerIdentity;
         },
       };
     </script>

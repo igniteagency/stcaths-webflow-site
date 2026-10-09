@@ -7,6 +7,7 @@ import handleExternalLinks from '$utils/external-link';
 import addMainElementId from '$utils/main-element-id';
 import { duplicateMarqueeList } from '$utils/marquee-list';
 import { setSearchResultTextFromQuery } from '$utils/search-query-text';
+import { TEXT_REVEAL_SELECTOR } from '$utils/text-motion-settings';
 
 window.Webflow = window.Webflow || [];
 window.Webflow?.push(() => {
@@ -35,7 +36,7 @@ function initComponents() {
 function UIFunctions() {
   duplicateMarqueeList();
   initDetailsGroups();
-  window.conditionalLoadScript('[data-text-reveal="chars"]', 'components/text-reveal.js');
+  window.conditionalLoadScript(TEXT_REVEAL_SELECTOR, 'components/text-reveal.js');
   window.conditionalLoadScript(
     '[data-el="switching-tabs-component"], .switcing-tabs_component, .switching-tabs_component',
     'components/switching-tabs.js'

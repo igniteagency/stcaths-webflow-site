@@ -19,6 +19,32 @@ interface Webflow_IX3 extends Webflow.require {
 }
 
 declare global {
+  type TextRevealPreset = 'heading' | 'paragraph' | 'eyebrow' | 'menu';
+  type TextRevealOptions = Partial<
+    Record<
+      | 'duration'
+      | 'stagger'
+      | 'delay'
+      | 'blur'
+      | 'rotation'
+      | 'rotationX'
+      | 'y'
+      | 'x'
+      | 'opacity'
+      | 'scale',
+      number
+    >
+  > & { preset?: TextRevealPreset; paused?: boolean };
+  interface TextRevealHandle {
+    animation: ReturnType<typeof GSAP.fromTo>;
+    play(): void;
+    revert(): void;
+  }
+  interface TextRevealAPI {
+    init(root?: ParentNode): void;
+    create(element: HTMLElement, options?: TextRevealOptions): Promise<TextRevealHandle | null>;
+    dispose(root?: ParentNode): void;
+  }
   Webflow: typeof Webflow;
 
   /** GSAP and sub-libs loading from Webflow CDN */
@@ -44,7 +70,8 @@ declare global {
   /** Global window types */
   interface Window {
     gsap: typeof GSAP;
-    stCathsTextReveal?: { init(root?: ParentNode): void };
+    ScrollTrigger: typeof ScrollTrigger;
+    stCathsTextReveal?: TextRevealAPI;
     Webflow: Webflow;
     WF_IX: Webflow_IX3;
 

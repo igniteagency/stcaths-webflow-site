@@ -96,96 +96,167 @@ The project will process and output the files mentioned in the `files` const of 
 - Browsers without native named-details support receive a scoped `toggle` fallback.
 - Disclosure animation belongs to progressive-enhancement CSS in Webflow, not JavaScript.
 
-### Opt-in letter reveal (St Catherine’s only)
+### Global reusable text motion (St Catherine’s)
+
+`global.js` conditionally loads `components/text-reveal.js` for **all** `h1`–`h6`, paragraphs and
+`.text-style-eyebrow`, `.eyebrow`, `[data-el="eyebrow"]` throughout the document. Native list items
+and blockquotes within `.w-richtext` / `.rich-text` also qualify. Containers with nested text
+blocks yield to their leaves, so `li > p` / `blockquote > p` animate once. Mixed containers with
+both bare text and child blocks keep their bare text native; wrap that text in a paragraph to reveal it.
+Text in controls/links, editable content, tables and media is excluded from automatic selection.
+Structural ancestors such as `main tabindex="-1"` (a skip-link destination) remain eligible; targets
+with their own tabindex and actual control ancestors remain excluded.
+
+**Migration:** remove old `data-text-reveal="chars"` hooks to get the default preset for each tag.
+The legacy value still explicitly selects the heading preset, including on a paragraph. Optional
+`data-text-reveal="heading|paragraph|eyebrow|menu"` selects a preset on a text wrapper.
+
+| Preset    | Units | Duration | Stagger each | Initial state                                                               | Origin / perspective |
+| --------- | ----- | -------- | ------------ | --------------------------------------------------------------------------- | -------------------- |
+| heading   | chars | 1.5s     | .025s        | y 100px, x 0, opacity 0, blur 22px, rotation 12°, rotationX −21°, scale .95 | 50% 100% / 800px     |
+| paragraph | lines | 1.5s     | .1s          | y 30px, x 0, opacity 0, blur 0, rotations 0, scale 1                        | 0% 100% / 800px      |
+| eyebrow   | lines | 1.5s     | .1s          | Same as paragraph                                                           | Same as paragraph    |
+| menu      | words | .55s     | .025s        | y 28px, x 0, opacity 0, blur 8px, rotation 3°, rotationX 0, scale 1         | 50% 100% / none      |
+
+Every preset uses delay 0, `power3.out`, stagger from `start`, and ends at x/y/rotations 0,
+scale/opacity 1 and blur 0. Settings live in `src/utils/text-motion-settings.ts`; heading,
+paragraph and menu values match the current Astro reference. There is no independent Astro
+eyebrow preset, so eyebrows use the paragraph profile.
+
+Automatic registration uses the existing global GSAP + ScrollTrigger with `once: true` and the
+`top 92%` threshold clamped to the scrollable page. A numeric start function applies the clamp on
+every individual refresh, including targets registered after page load; its upper limit is one
+pixel before maximum scroll so `onEnter` can fire. Preparation checks the trigger’s actual numeric
+start and scroll position. Footer text therefore reveals at maximum scroll without a bottom spacer. H1 follows exactly the same rule; any measurable target already past that threshold
+starts after fonts are ready without another scroll. Content stays native until preparation.
+There are **no** page-load/hero, menu-open, dialog, click or custom-event animation bindings.
+
+Opt out on an element, section, or page; these also block manual `create()`:
 
 ```html
-<h2 data-text-reveal="chars">A place to discover her potential</h2>
-<p data-text-reveal="chars">A short introduction written as plain text.</p>
+<p data-text-reveal="off">Always native text</p>
+<section data-text-reveal="off">…</section>
+<body data-text-reveal="off">
+  …
+</body>
 ```
 
-`global.js` conditionally loads `components/text-reveal.js` when this hook exists. Only that bundle
-contains [Kugiri](https://raw.githubusercontent.com/edoardolunardi/kugiri/main/README.md), pinned to
-0.5.3 with Bun. It uses St Catherine’s existing CDN-provided `window.gsap`; it does not load or bundle
-another GSAP or SplitText. Have the existing GSAP global available before component initialization.
-There is no Webflow/CSS change or automatic opt-in for existing headings.
-
-- Only static, plain-text `h1`–`h6` and `p` elements qualify. All child elements (including links,
-  emphasis, icons, `<br>`, and accessible spans), interactive targets/ancestors, editable content,
-  and non-text roles are skipped. Do not opt in text with programmatic interaction handlers.
-- Native text stays visible while waiting for a positive viewport intersection, a measurable box,
-  and `document.fonts.ready`. Hidden, `display:none`, zero-width and offscreen targets stay unsplit.
-  Pending targets observe size and visibility attributes on their ancestors until they activate.
-- The one-time reveal animates character opacity and vertical offset using GSAP for at most one
-  second. Kugiri measures the browser’s existing line breaks, including `text-wrap: balance/pretty`.
-  Completion restores original text nodes and authored attributes, including inline styles and
-  `data-split`. A viewport resize or target-width change mid-animation cancels, restores, and never
-  replays; native text can then reflow normally.
-- Headings retain their original accessible name, respecting authored `aria-label` and
-  `aria-labelledby`. Generated lines/characters are hidden from assistive technology. Paragraphs
-  retain one visually hidden native text alternative during the animation because paragraph roles
-  cannot be named with `aria-label`. Authored `role`, `aria-hidden` and other data/ARIA remain intact.
-- Reduced motion skips the reveal initially and cancels both active and pending reveals if enabled
-  later. Missing GSAP/observer support, split errors or tween errors leave natural text. Completed,
-  skipped and canceled elements do not replay. Observers/listeners are removed on completion,
-  cancellation or page exit; pending hidden targets remain watched until then.
-
-The component initializes itself on execution. Repeated execution and repeated calls are idempotent,
-including while fonts are pending. For newly inserted opt-in content:
+Inherited `data-no-text-motion` and `data-no-heading-motion` also opt out. Use
+`data-text-trigger="manual"` on a target or ancestor to disable automatic registration while
+retaining the factory. The component initializes itself once; execution and `init()` are idempotent.
+For newly inserted content, explicitly call `window.stCathsTextReveal.init(container)` (includes
+that root itself). There is no continuous document scanning.
 
 ```js
 await window.loadScript('components/text-reveal.js');
-window.stCathsTextReveal?.init(container); // optional root; defaults to document; includes root itself
+const motion = window.stCathsTextReveal;
+
+// Show hidden content first and let its layout settle. create() then awaits fonts itself.
+// Select a plain label span inside the link/button, not the control itself.
+const label = document.querySelector('[data-el="menu-label"]');
+const handle = await motion.create(label, { preset: 'menu', paused: true });
+handle?.play();
+// Or cancel immediately and restore its original DOM:
+handle?.revert();
 ```
 
-There is no replay API or continuous DOM discovery. Avoid changing text, its inline style, font, or
-ARIA during the one-second reveal: the original text/style snapshot is restored. Character boxes
-temporarily lose cross-letter kerning, ligatures and connected-script shaping. Kugiri also prevents
-page translation on split lines until restoration. Use sparingly on short copy; verify the actual
-site typography in Safari/Firefox as well as Chromium. Transitions/animations that hide a target
-without changing its box or observed attributes are outside this hook’s activation contract.
+`create(element, options)` returns `Promise<TextRevealHandle | null>` with the actual GSAP tween
+as `handle.animation`, plus `play(): void` and `revert(): void`. It never creates a ScrollTrigger
+and cancels any existing registration/animation for that target, even when creation subsequently
+returns null. Default is paused; use `paused: false` to run directly. Finite numeric overrides:
+`duration`, `stagger`, `delay`, `blur`, `rotation`, `rotationX`, `y`, `x`, `opacity`, `scale`.
+Duration/stagger/delay/blur are clamped to zero or above. It returns null for opted-out, unsafe,
+hidden/zero-size targets, reduced motion, unavailable dependencies or an error. Show hidden content
+**before** calling; it does not wait for a future menu/dialog event.
 
-#### Reveal regression checks
+```js
+const handle = await motion.create(label, { preset: 'menu' });
+if (handle) {
+  const timeline = gsap.timeline({ paused: true });
+  timeline.add(handle.animation, 0);
+  handle.animation.paused(false); // let the parent timeline control this child
+  timeline.play();
+}
+```
+
+Completion/cancellation restores native DOM immediately (external GSAP interruption defers cleanup
+until its renderer returns). Create again after restoration to replay; reusing an already completed
+handle cannot re-split text. `motion.dispose(root = document)` cancels pending/prepared/active work
+in that scope; automatic targets do not replay afterward. Dispose before removing controlled views.
+
+Kugiri 0.5.3 is bundled **only** in the component; generated `dist/prod/global.js` contains just the
+shared selector/config it needs. The site must supply `window.gsap` and `window.ScrollTrigger`
+(currently Webflow CDN 3.15.0) before automatic initialization. Neither GSAP core nor any GSAP plugin
+is bundled or fetched here. Missing ScrollTrigger leaves automatic content natural; manual creation
+still works with GSAP. ResizeObserver and MutationObserver are also required for safe effects.
+
+Rich text follows [Kugiri’s documented painted-line splitting](https://github.com/edoardolunardi/kugiri#readme):
+emphasis, strong, `<br>`, links and first-line indentation are preserved. Lines keep accessible native
+text; no paragraph `aria-label` is added. Character/word headings use normalized rendered text (`innerText`, with a text-content fallback)
+for their accessible name, so `<br>` remains a word boundary; authored `aria-label`/`aria-labelledby`
+remain authoritative. Only generated lines are hidden. A plain menu span gets one visually hidden native text alternative inside the
+span, retaining its enclosing link’s accessible name. Heading/word targets containing links instead
+use a whole-element tween, so links remain exposed. Descendant IDs, names, tabindex and authored ARIA
+also use this fallback to prevent duplicate identifiers or lost semantics. Media/form content is skipped.
+
+Recursive original-node snapshots restore hierarchy, text and descendant attributes after Kugiri’s
+Range mutations, including existing descendant listeners. Whole-element cleanup leaves descendants
+in place, retaining focus. Ordinary paragraph links may be cloned per line while
+split; their native link behavior and AX exposure remain, but directly attached listeners belong to
+the original nodes and return on cleanup. Keyboard focus (`:focus-visible`) on a split link cancels
+the reveal, restores its original anchor/listeners, and transfers focus without scrolling. Pointer
+focus leaves the live anchor in place for native activation; any focused clone is mapped back to
+its original on completion/cancellation. A link already focused before preparation stays native.
+No click or key handlers are added. Opt out of dynamic widgets or copy with custom inline
+handlers/state, and avoid modifying text/styles/ARIA during a reveal. Cleanup restores the snapshot;
+changes made inside generated wrappers are not retained. Whole-element fallbacks preserve descendant
+identity throughout but cannot stagger individual units. Character splitting temporarily loses
+kerning/ligatures; generated lines suppress page translation until restoration. Check site fonts in
+Safari/Firefox as well as Chromium.
+
+Fonts are awaited before splitting. Width changes in the target/container, viewport resize, later
+font loading, reduced-motion changes, disposal and page exit restore prepared/active text rather
+than replaying. Hidden automatic targets watch only their own size and ancestor visibility attributes
+until measurable; detached targets are released on observed size changes or explicit disposal.
+After all work completes, component observers/listeners/triggers are removed. Native text survives
+split/tween/trigger errors. GSAP’s own global plugin resources are not owned by this component.
+See [ScrollTrigger.create](<https://gsap.com/docs/v3/Plugins/ScrollTrigger/static.create()/>) and
+[ScrollTrigger.kill](<https://gsap.com/docs/v3/Plugins/ScrollTrigger/kill()/>) for the lifecycle used here.
+
+#### Text-motion verification
 
 ```sh
 bun install --frozen-lockfile
-bun test
-bunx --no-install tsc --noEmit
+node --test tests/*.test.mjs
+bunx --no-install tsc --noEmit # compare with existing repository baseline errors
 bun run build
-bun run qa:text-reveal
-```
-
-The focused unit suite uses controlled split/GSAP/observer doubles for lifecycle failures. The
-executable `bin/qa-text-reveal.mjs` serves the **actual `dist/prod` component**, real GSAP from the
-existing dev dependency, and `tests/fixtures/text-reveal.html` on an ephemeral localhost port. It
-uses an available Playwright module, without installing a browser or test framework. If Playwright
-is outside this checkout, point `PLAYWRIGHT_MODULE` at its absolute `index.mjs`; optionally point
-`PLAYWRIGHT_CHROMIUM_EXECUTABLE` at an installed Chromium/Chrome executable. For this workstation:
-
-```sh
 PLAYWRIGHT_MODULE=/Users/iggy/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs \
 PLAYWRIGHT_CHROMIUM_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
-TEXT_REVEAL_EVIDENCE_DIR=/tmp/text-reveal-evidence \
+TEXT_REVEAL_EVIDENCE_DIR=/Volumes/Sandisk-2TB-SSD/hermes/outputs/stcaths-global-text-motion/final \
 bun run qa:text-reveal
 ```
 
-QA fetches a pinned Open Sans Latin WOFF2 from Google Fonts, serves it locally and deliberately gates
-its first load to check font readiness. Set `TEXT_REVEAL_FONT_PATH` to a local copy of that font for
-offline runs. The script checks 360/768/1280px balance/pretty line breaks and geometry; actual
-accessibility-tree names and paragraph text; exact completion restoration; viewport/container
-resize; initial/live reduced motion; display/visibility/zero-width/offscreen activation; repeated
-initialization and dynamic roots; unsafe markup; missing GSAP/observers; forced split/tween failures;
-and real-time completion. Most cases pause real GSAP tweens for deterministic inspection. Each case
-also checks observer cleanup and browser errors where applicable. A failed launch or assertion exits
-nonzero. Do not bypass MachPort/OS sandbox launch failures: Hermes should run QA outside the coding
-sandbox. A blocked launch is **not** a passing browser test.
+The executable runner serves the actual production component, real Webflow CDN GSAP/ScrollTrigger
+**3.15.0**, and the local fixture. It fetches pinned assets by default; for offline runs set
+`TEXT_REVEAL_GSAP_PATH`, `TEXT_REVEAL_SCROLLTRIGGER_PATH`, and `TEXT_REVEAL_FONT_PATH` (Open Sans Latin
+WOFF2, URL in the runner). `TEXT_REVEAL_SCENARIO` optionally filters scenario names. No dependencies
+or browsers are installed by this runner, and Chromium’s sandbox stays enabled. If OS sandboxing
+blocks launch, the parent must run it; that is not a passing browser check.
 
-Optional `TEXT_REVEAL_EVIDENCE_DIR` saves screenshots, full Chromium AX trees (`.ax.json`), and
-measured tween/character state (`.state.json`) at 35% progress and after exact restoration at
-360/768/1280px. These use the actual split nodes and GSAP tweens. `run-result.json` records the
-bundle hash, browser version, scenario outcomes, evidence paths, and any failure; failed scenarios
-also attempt a diagnostic capture. Separate restoration cases avoid reading host attributes while
-split, so evidence collection cannot mask CSSOM's deferred `style` serialization. Real-time
-completion covers both headings and paragraphs at mobile and desktop widths.
+Scenarios cover immediate H1 outside main, below-fold registration, footer/eyebrow, rich text,
+controls/opt-outs, manual paused creation/play/replay/timeline use, auto takeover, fonts, reduced
+motion, resize/disposal, missing dependencies, failure restoration and duplicate initialization.
+360/768/1280px checks compare line membership, top/left/right edges, height, and every non-whitespace
+glyph’s coordinates at rest (all within 2px), then capture partial motion. Only whitespace
+representation is normalized: Kugiri spacer boxes can paint gaps whose text Range has zero width.
+Glyph-position checks still reject collapsed gaps. Rich-heading and menu-label `<br>` names are
+asserted against the Chromium AX tree; keyboard focus/restoration and native link activation are
+also checked. To reproduce the Webflow typography, supply the parent’s `nantes-web-book.woff2` via
+`TEXT_REVEAL_FONT_PATH`; run results record the font source and hash. Evidence includes screenshots, full Chromium AX trees, state JSON and a run-result
+with bundle/asset hashes, browser version, per-scenario outcomes and failures. Observers are counted
+only when created by this component; Playwright polling is excluded. The runner never returns a
+GSAP tween from `page.evaluate` because tweens are thenable. Separate lazy-CSSOM cases avoid host
+attribute reads while split, preserving the style-restoration regression test.
 
 ### Switching tabs
 

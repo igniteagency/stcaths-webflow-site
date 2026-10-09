@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
-import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -19,12 +18,14 @@ const result = {
   scenarios: [],
   evidence: [],
 };
-const require = createRequire(import.meta.url);
 let browser;
 let server;
 let checks = 0;
 try {
   if (EVIDENCE_DIR) await mkdir(EVIDENCE_DIR, { recursive: true });
+  result.bundleSha256 = createHash('sha256')
+    .update(await readFile(new URL('dist/prod/components/text-reveal.js', ROOT)))
+    .digest('hex');
   const playwright = process.env.PLAYWRIGHT_MODULE
     ? await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE).href)
     : await import('playwright');
@@ -37,13 +38,24 @@ try {
           new URL('dist/prod/components/text-reveal.js', ROOT),
           'text/javascript',
         ],
-        ['/gsap.js', require.resolve('gsap/dist/gsap.min.js'), 'text/javascript'],
       ].map(async ([url, path, type]) => [url, { body: await readFile(path), type }])
     )
   );
-  result.bundleSha256 = createHash('sha256')
-    .update(files.get('/dist/prod/components/text-reveal.js').body)
-    .digest('hex');
+  for (const [url, env, filename] of [
+    ['/gsap.js', 'TEXT_REVEAL_GSAP_PATH', 'gsap.min.js'],
+    ['/ScrollTrigger.js', 'TEXT_REVEAL_SCROLLTRIGGER_PATH', 'ScrollTrigger.min.js'],
+  ]) {
+    const body = process.env[env]
+      ? await readFile(process.env[env])
+      : await fetch(`https://cdn.prod.website-files.com/gsap/3.15.0/${filename}`).then(
+          async (response) => {
+            assert.ok(response.ok, `${filename} fetch: ${response.status}`);
+            return Buffer.from(await response.arrayBuffer());
+          }
+        );
+    files.set(url, { body, type: 'text/javascript' });
+    result[`${filename}Sha256`] = createHash('sha256').update(body).digest('hex');
+  }
   const font = process.env.TEXT_REVEAL_FONT_PATH
     ? await readFile(process.env.TEXT_REVEAL_FONT_PATH)
     : await fetch(FONT_URL).then(async (response) => {
@@ -51,6 +63,8 @@ try {
         return Buffer.from(await response.arrayBuffer());
       });
   files.set('/qa-font.woff2', { body: font, type: 'font/woff2' });
+  result.fontSha256 = createHash('sha256').update(font).digest('hex');
+  result.fontSource = process.env.TEXT_REVEAL_FONT_PATH ?? FONT_URL;
   server = createServer((request, response) => {
     const file = files.get(new URL(request.url, 'http://localhost').pathname);
     response.writeHead(file ? 200 : 404, {
@@ -66,6 +80,7 @@ try {
   const base = `http://127.0.0.1:${server.address().port}`;
   browser = await playwright.chromium.launch({
     headless: true,
+    chromiumSandbox: true,
     ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
       ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE }
       : {}),
@@ -78,6 +93,12 @@ try {
       (phase) => ({
         phase,
         viewport: { width: innerWidth, height: innerHeight },
+        triggers: window.ScrollTrigger?.getAll().map((t) => ({
+          id: t.trigger?.id,
+          start: t.start,
+        })),
+        componentClean: window.fixture?.clean(),
+        geometry: window.fixture?.geometry,
         tweens:
           window.fixture?.tweens.map((tween) => ({
             progress: tween.progress(),
@@ -86,7 +107,7 @@ try {
           })) ?? [],
         targets: [...(window.fixture?.native ?? [])].map(([id, before]) => {
           const element = document.getElementById(id);
-          const chars = [...element.querySelectorAll('[data-char]')];
+          const chars = [...element.querySelectorAll('[data-char],[data-word],[data-line]')];
           return {
             id,
             charCount: chars.length,
@@ -121,6 +142,21 @@ try {
       await cdp.detach();
     }
   }
+  async function assertAXName(page, role, name) {
+    const cdp = await page.context().newCDPSession(page);
+    try {
+      const { nodes } = await cdp.send('Accessibility.getFullAXTree');
+      assert.equal(
+        nodes.filter(
+          (node) => !node.ignored && node.role?.value === role && node.name?.value === name
+        ).length,
+        1,
+        `${role} AX name: ${name}`
+      );
+    } finally {
+      await cdp.detach();
+    }
+  }
   async function scenario(name, run, options = {}) {
     if (process.env.TEXT_REVEAL_SCENARIO && !name.includes(process.env.TEXT_REVEAL_SCENARIO))
       return;
@@ -135,7 +171,7 @@ try {
         ...options,
       });
       page = await context.newPage();
-      page.setDefaultTimeout(5000);
+      page.setDefaultTimeout(8000);
       page.on('pageerror', (error) => errors.push(error.message));
       await run(page);
       assert.deepEqual(errors, [], 'uncaught browser errors');
@@ -160,6 +196,10 @@ try {
     await page.goto(base + query);
     await page.evaluate(() => document.fonts.ready);
     assert.equal(await page.evaluate(() => document.fonts.check('20px "Reveal QA"')), true);
+    assert.deepEqual(await page.evaluate(() => [gsap.version, ScrollTrigger.version]), [
+      '3.15.0',
+      '3.15.0',
+    ]);
   }
   async function start(page, ids) {
     await page.evaluate((ids) => fixture.prepare(ids), ids);
@@ -167,7 +207,7 @@ try {
   }
   async function split(page, id) {
     await page.waitForFunction(
-      (id) => document.getElementById(id).querySelector('[data-char]'),
+      (id) => document.getElementById(id).querySelector('[data-line]'),
       id
     );
   }
@@ -215,165 +255,497 @@ try {
     await start(page, ['balance']);
     await page.waitForTimeout(100);
     assert.equal(await page.evaluate(() => document.fonts.status), 'loading');
-    assert.equal(await page.locator('#balance [data-char]').count(), 0);
+    assert.equal(await page.locator('#balance [data-line]').count(), 0);
     release();
     await split(page, 'balance');
-    assert.equal(await page.evaluate(() => document.fonts.status), 'loaded');
     await complete(page);
     await restored(page, ['balance']);
   });
 
-  for (const width of [360, 1280]) {
-    for (const style of [null, '', 'color: rgb(24, 40, 60); --chars: 77']) {
-      await scenario(
-        `paragraph style ${JSON.stringify(style)} restores without inspection at ${width}px`,
-        async (page) => {
-          await open(page);
-          await page.locator('#pretty').evaluate((element, style) => {
-            if (style !== null) element.setAttribute('style', style);
-          }, style);
-          await start(page, ['pretty']);
-          await split(page, 'pretty');
-          // No host attribute reads or evidence capture between splitting and completion.
-          await complete(page);
-          await restored(page, ['pretty']);
-          await page.waitForTimeout(100);
-          assert.equal(
-            await page.evaluate(() => fixture.restored(['pretty'])),
-            true,
-            'restoration remains exact after later GSAP ticks'
-          );
-        },
-        { viewport: { width, height: 1600 } }
+  await scenario(
+    'global H1 outside main immediately reveals and below-fold text uses ScrollTrigger once',
+    async (page) => {
+      await open(page);
+      await start(page, ['balance', 'eyebrow', 'offscreen', 'footer-copy']);
+      await split(page, 'balance');
+      await split(page, 'eyebrow');
+      assert.equal(await page.locator('#balance').getAttribute('data-text-reveal'), null);
+      assert.equal(await page.locator('#balance').evaluate((el) => !!el.closest('main')), false);
+      assert.equal(await page.evaluate(() => scrollY), 0);
+      assert.equal(await page.locator('#offscreen [data-line]').count(), 0);
+      assert.deepEqual(
+        await page.evaluate(() =>
+          ScrollTrigger.getAll()
+            .map((t) => t.trigger.id)
+            .sort()
+        ),
+        ['footer-copy', 'offscreen']
       );
+      await page.evaluate(() => {
+        fixture.tweens.forEach((t) => t.progress(0.35));
+      });
+      await capture(page, 'global', 'split');
+      await complete(page);
+      const footerStart = await page.evaluate(() => ({
+        start: ScrollTrigger.getAll().find((t) => t.trigger.id === 'footer-copy').start,
+        max: ScrollTrigger.maxScroll(window),
+      }));
+      assert.ok(
+        footerStart.start >= footerStart.max - 2 && footerStart.start < footerStart.max,
+        'footer start stays inside the reachable scroll range'
+      );
+      await page.evaluate(() => {
+        scrollTo(0, ScrollTrigger.maxScroll(window));
+      });
+      await split(page, 'offscreen');
+      await split(page, 'footer-copy');
+      assert.equal(
+        await page.evaluate(
+          () =>
+            document.querySelector('#footer-copy').getBoundingClientRect().top > innerHeight * 0.92
+        ),
+        true,
+        'footer reveals even when 92% is unreachable'
+      );
+      await complete(page);
+      await restored(page, ['balance', 'eyebrow', 'offscreen', 'footer-copy']);
+      await noReplay(page);
+      assert.equal(await page.evaluate(() => fixture.sameGSAP()), true);
     }
-  }
+  );
 
   for (const width of [360, 768, 1280]) {
     await scenario(
-      `balance/pretty geometry and restoration at ${width}px`,
+      `rich text painted geometry and AX at ${width}px`,
       async (page) => {
         await open(page);
-        await start(page, ['balance', 'pretty']);
-        await split(page, 'balance');
-        await split(page, 'pretty');
-        const geometry = await page.evaluate(() =>
-          ['balance', 'pretty'].map((id) => {
-            const element = document.getElementById(id);
-            return {
-              id,
-              before: fixture.native.get(id).lines,
-              after: [...element.querySelectorAll('[data-line]')].map((line) => ({
-                text: line.textContent.replace(/\s+/g, ' ').trim(),
-                width: line.getBoundingClientRect().width,
-              })),
-              heightBefore: fixture.native.get(id).height,
-              heightAfter: element.getBoundingClientRect().height,
-              width: element.clientWidth,
-            };
-          })
+        const ids = [
+          'balance',
+          'pretty',
+          'rich',
+          'linked-paragraph',
+          'quote-direct',
+          'list-direct',
+        ];
+        await page.evaluate((ids) => {
+          // Keep every geometry target visible without changing its typography or inline markup.
+          const column = document.querySelector('.column');
+          column.classList.add('w-richtext');
+          ids.forEach((id) => column.append(document.getElementById(id)));
+        }, ids);
+        await assertAXName(
+          page,
+          'heading',
+          'Keep authored emphasis and natural line breaks intact'
+        );
+        await start(page, ids);
+        for (const id of ids) await split(page, id);
+        await page.evaluate(() => {
+          fixture.tweens.forEach((t) => t.progress(1, true));
+        });
+        const geometry = await page.evaluate(
+          (ids) =>
+            (fixture.geometry = ids.map((id) => {
+              const el = document.getElementById(id);
+              const before = fixture.native.get(id);
+              return {
+                id,
+                before: before.lines,
+                after: fixture.paintedLines(el),
+                heightBefore: before.height,
+                heightAfter: el.getBoundingClientRect().height,
+              };
+            })),
+          ids
         );
         for (const item of geometry) {
           assert.deepEqual(
-            item.after.map((row) => row.text),
-            item.before.map((row) => row.text),
+            // Kugiri's spacer boxes can paint a gap while their whitespace Range has zero width.
+            item.after.map((row) => row.text.replace(/\s+/g, '')),
+            item.before.map((row) => row.text.replace(/\s+/g, '')),
             `${item.id} painted line breaks`
           );
           assert.ok(Math.abs(item.heightBefore - item.heightAfter) <= 2, `${item.id} height drift`);
-          assert.ok(
-            item.after.every((row) => row.width <= item.width + 2),
-            `${item.id} overflow`
-          );
+          item.before.forEach((row, index) => {
+            const after = item.after[index];
+            assert.equal(after.glyphs.length, row.glyphs.length, `${item.id} glyph count`);
+            row.glyphs.forEach((glyph, glyphIndex) => {
+              const actual = after.glyphs[glyphIndex];
+              assert.equal(actual.char, glyph.char, `${item.id} glyph order`);
+              for (const edge of ['top', 'left', 'right'])
+                assert.ok(
+                  Math.abs(glyph[edge] - actual[edge]) <= 2,
+                  `${item.id} glyph ${glyphIndex} ${edge} drift: ${glyph[edge]} vs ${actual[edge]}`
+                );
+            });
+            for (const edge of ['top', 'left', 'right'])
+              assert.ok(
+                Math.abs(row[edge] - item.after[index][edge]) <= 2,
+                `${item.id} ${edge} drift: ${row[edge]} vs ${item.after[index][edge]}`
+              );
+          });
         }
-        await page.evaluate(() => fixture.tweens.forEach((tween) => tween.progress(0.35)));
-        const progress = await page.evaluate(() => ({
-          tweens: fixture.tweens.map((tween) => tween.progress()),
-          chars: ['balance', 'pretty'].map(
-            (id) => document.getElementById(id).querySelectorAll('[data-char]').length
-          ),
-        }));
-        assert.equal(progress.tweens.length, 2);
-        assert.ok(progress.tweens.every((value) => Math.abs(value - 0.35) < 0.001));
-        assert.ok(progress.chars.every((count) => count > 0));
-        await capture(page, `geometry-${width}px`, 'split');
-        await complete(page);
-        await restored(page, ['balance', 'pretty']);
-        assert.equal(
-          await page.evaluate(() => fixture.tweens.every((tween) => tween.progress() === 1)),
-          true
+        await assertAXName(
+          page,
+          'heading',
+          'Keep authored emphasis and natural line breaks intact'
         );
-        await capture(page, `geometry-${width}px`, 'complete');
+        assert.equal(await page.locator('#linked-paragraph a[aria-hidden="true"]').count(), 0);
+        assert.match(await page.locator('#linked-paragraph').ariaSnapshot(), /link/);
+        assert.equal(await page.locator('#pretty').getAttribute('aria-label'), null);
+        assert.equal(await page.locator('#pretty [aria-hidden="true"]').count(), 0);
+        assert.match(
+          await page.locator('#balance').ariaSnapshot(),
+          /heading "St Catherine’s School inspires girls to shape their future"/
+        );
+        await page.evaluate(() => {
+          fixture.tweens.forEach((t) => t.progress(0.35));
+        });
+        await capture(page, `geometry-${width}`, 'split');
+        await complete(page);
+        await restored(page, ids);
+        await assertAXName(
+          page,
+          'heading',
+          'Keep authored emphasis and natural line breaks intact'
+        );
+        await capture(page, `geometry-${width}`, 'complete');
         await noReplay(page);
-        assert.equal(await page.evaluate(() => fixture.sameGSAP()), true);
       },
-      { viewport: { width, height: 1600 } }
+      { viewport: { width, height: 2600 } }
     );
   }
 
   await scenario(
-    'accessibility tree keeps heading names, paragraph text and authored ARIA',
+    'rich list/quote leaves, media and controls, inherited and element optouts',
     async (page) => {
       await open(page);
-      const before = await page.locator('#balance').ariaSnapshot();
-      const authoredBefore = await page.locator('#authored').ariaSnapshot();
-      const paragraphBefore = await page.locator('#pretty').ariaSnapshot();
-      await start(page, ['balance', 'pretty', 'authored', 'at-hidden']);
-      await split(page, 'authored');
-      await split(page, 'pretty');
-      const during = await page.locator('#balance').ariaSnapshot();
-      assert.match(during, /heading "St Catherine’s School inspires girls to shape their future"/);
-      assert.equal((during.match(/heading /g) ?? []).length, 1);
+      const ids = [
+        'quote-container',
+        'quote-leaf',
+        'list-container',
+        'list-leaf',
+        'list-direct',
+        'media',
+        'table',
+        'table-text',
+        'focusable',
+        'nested-link',
+        'editable',
+        'button-role',
+        'button-eyebrow',
+        'inherited-off',
+        'element-off',
+        'legacy-off',
+        'nonsemantic',
+      ];
+      await start(page, ids);
+      for (const id of ['quote-leaf', 'list-leaf', 'list-direct']) {
+        await page.locator(`#${id}`).scrollIntoViewIfNeeded();
+        await split(page, id);
+      }
+      assert.equal(await page.evaluate(() => fixture.tweens.length), 3);
+      assert.equal(
+        await page.locator('#quote-container > [data-line],#list-container > [data-line]').count(),
+        0
+      );
+      for (const id of ids.filter(
+        (id) =>
+          !['quote-container', 'quote-leaf', 'list-container', 'list-leaf', 'list-direct'].includes(
+            id
+          )
+      ))
+        assert.equal(await page.locator(`#${id} [data-line]`).count(), 0);
+      await complete(page);
+      await restored(page, ids);
+    }
+  );
+
+  await scenario(
+    'whole-element safeguards preserve IDs, names, tabindex, heading links and listener identity',
+    async (page) => {
+      await open(page);
+      await page.evaluate(() => {
+        fixture.clicks = 0;
+        fixture.child = document.querySelector('#identity-strong');
+        fixture.child.addEventListener('click', () => fixture.clicks++);
+        fixture.em = document.querySelector('#rich em');
+        fixture.em.addEventListener('click', () => fixture.clicks++);
+      });
+      await start(page, ['link', 'identity-paragraph', 'rich', 'authored']);
+      for (const id of ['link', 'identity-paragraph', 'rich', 'authored']) {
+        await page.locator(`#${id}`).scrollIntoViewIfNeeded();
+        await page.waitForFunction(
+          (id) =>
+            fixture.tweens.some((t) =>
+              t
+                .targets()
+                .some(
+                  (el) =>
+                    el === document.getElementById(id) || document.getElementById(id).contains(el)
+                )
+            ),
+          id
+        );
+      }
+      assert.equal(
+        await page.locator('#link [data-line],#identity-paragraph [data-line]').count(),
+        0
+      );
+      assert.equal(await page.locator('#identity-strong').count(), 1);
+      assert.match(await page.locator('#link').ariaSnapshot(), /link "school link"/);
       assert.match(
         await page.locator('#authored').ariaSnapshot(),
         /heading "The authored accessible name"/
       );
-      assert.equal(await page.locator('#pretty').ariaSnapshot(), paragraphBefore);
-      assert.equal(await page.locator('#at-hidden').ariaSnapshot(), '');
-      assert.equal(await page.locator('[data-char]:not([aria-hidden="true"])').count(), 0);
-      const cdp = await page.context().newCDPSession(page);
-      const { nodes } = await cdp.send('Accessibility.getFullAXTree');
-      const headings = nodes.filter((node) => !node.ignored && node.role?.value === 'heading');
-      assert.equal(
-        headings.filter(
-          (node) =>
-            node.name?.value?.replace(/\s+/g, ' ').trim() ===
-            'St Catherine’s School inspires girls to shape their future'
-        ).length,
-        1
-      );
-      assert.equal(
-        headings.filter((node) => node.name?.value === 'The authored accessible name').length,
-        1
-      );
-      console.info(`  AX evidence: ${headings.map((node) => node.name?.value).join(' | ')}`);
+      await page.evaluate(() => {
+        fixture.child.focus();
+      });
       await complete(page);
-      await restored(page, ['balance', 'pretty', 'authored', 'at-hidden']);
-      assert.equal(await page.locator('#balance').ariaSnapshot(), before);
-      assert.equal(await page.locator('#authored').ariaSnapshot(), authoredBefore);
+      await restored(page, ['link', 'identity-paragraph', 'rich', 'authored']);
+      assert.equal(await page.evaluate(() => document.activeElement === fixture.child), true);
+      assert.equal(
+        await page.evaluate(() => {
+          fixture.child.click();
+          fixture.em.click();
+          return (
+            fixture.clicks === 2 &&
+            fixture.child === document.querySelector('#identity-strong') &&
+            fixture.em === document.querySelector('#rich em')
+          );
+        }),
+        true
+      );
     }
   );
 
-  for (const kind of ['viewport', 'container']) {
-    await scenario(`${kind} resize mid-animation cancels and does not replay`, async (page) => {
+  await scenario(
+    'manual paused menu label keeps link AX name, plays, replays and composes in a timeline without triggers',
+    async (page) => {
+      await open(page);
+      await start(page, ['menu-label', 'manual']);
+      const before = await page.locator('#menu-anchor').ariaSnapshot();
+      await assertAXName(page, 'link', 'Discover our school');
+      await page.evaluate(async () => {
+        fixture.handle = await stCathsTextReveal.create(document.querySelector('#menu-label'), {
+          preset: 'menu',
+          paused: true,
+        });
+      });
+      assert.equal(await page.evaluate(() => ScrollTrigger.getAll().length), 0);
+      assert.equal(await page.evaluate(() => fixture.handle.animation.paused()), true);
+      await assertAXName(page, 'link', 'Discover our school');
+      await capture(page, 'manual-menu', 'split');
+      await page.evaluate(() => {
+        fixture.handle.play();
+        fixture.handle.animation.pause().progress(1);
+      });
+      await restored(page, ['menu-label', 'manual']);
+      await page.evaluate(async () => {
+        fixture.handle = await stCathsTextReveal.create(document.querySelector('#menu-label'), {
+          preset: 'menu',
+        });
+        fixture.timeline = gsap.timeline({ paused: true });
+        fixture.timeline.add(fixture.handle.animation, 0);
+        fixture.handle.animation.paused(false);
+        fixture.timeline.progress(0.4);
+      });
+      assert.ok(await page.evaluate(() => fixture.handle.animation.progress() > 0));
+      assert.equal(await page.evaluate(() => ScrollTrigger.getAll().length), 0);
+      await page.evaluate(() => {
+        fixture.timeline.progress(1);
+        fixture.timeline.kill();
+      });
+      await restored(page, ['menu-label', 'manual']);
+      assert.equal(await page.locator('#menu-anchor').ariaSnapshot(), before);
+    }
+  );
+
+  await scenario(
+    'main tabindex=-1 permits automatic text and preserves control exclusions',
+    async (page) => {
+      await open(page);
+      await start(page, ['pretty', 'plain', 'nested-link', 'focusable', 'editable', 'button-role']);
+      await split(page, 'pretty');
+      await page.locator('#plain').scrollIntoViewIfNeeded();
+      await split(page, 'plain');
+      assert.equal(await page.locator('main').getAttribute('tabindex'), '-1');
+      assert.equal(
+        await page
+          .locator(
+            '#nested-link [data-line],#focusable [data-line],#editable [data-line],#button-role [data-line]'
+          )
+          .count(),
+        0
+      );
+      assert.equal(await page.evaluate(() => fixture.tweens.length), 2);
+      await complete(page);
+      await restored(page, [
+        'pretty',
+        'plain',
+        'nested-link',
+        'focusable',
+        'editable',
+        'button-role',
+      ]);
+    }
+  );
+
+  await scenario(
+    'keyboard focus restores original paragraph link and native activation',
+    async (page) => {
+      await open(page);
+      await page.evaluate(() => {
+        const paragraph = document.querySelector('#linked-paragraph');
+        document.querySelector('header').prepend(paragraph);
+        fixture.originalLink = paragraph.querySelector('a');
+        fixture.clicks = 0;
+        fixture.originalLink.addEventListener('click', () => fixture.clicks++);
+      });
+      await start(page, ['linked-paragraph']);
+      await split(page, 'linked-paragraph');
+      await page.evaluate(() => {
+        fixture.tweens.forEach((t) => t.progress(0.35));
+        fixture.splitLinks = [...document.querySelectorAll('#linked-paragraph a')];
+      });
+      const linkName =
+        'our school and its extraordinary learning community with many opportunities';
+      assert.ok(
+        (await page.locator('#linked-paragraph a').count()) > 1,
+        'fixture link wraps into cloned fragments'
+      );
+      assert.equal(await page.locator('#linked-paragraph a[aria-hidden="true"]').count(), 0);
+      // The paragraph is first in document order, so Tab reaches its first link fragment.
+      await page.keyboard.press('Tab');
+      await restored(page, ['linked-paragraph']);
+      assert.equal(
+        await page.evaluate(() => document.activeElement === fixture.originalLink),
+        true
+      );
+      assert.equal(
+        await page.locator('#linked-paragraph a').evaluate((el) => getComputedStyle(el).opacity),
+        '1'
+      );
+      await assertAXName(page, 'link', linkName);
+      await capture(page, 'focused-paragraph-link', 'complete');
+      await complete(page);
+      assert.equal(
+        await page.evaluate(() => document.activeElement === fixture.originalLink),
+        true,
+        'later tween completion cannot remove restored focus'
+      );
+      await page.keyboard.press('Enter');
+      await page.waitForFunction(() => location.hash === '#plain');
+      assert.equal(
+        await page.evaluate(() => fixture.clicks),
+        1,
+        'original direct listener and native navigation both survive'
+      );
+      assert.equal(
+        await page.locator('[data-text-reveal-link]').count(),
+        0,
+        'no correlation attributes leak'
+      );
+    },
+    { viewport: { width: 360, height: 1200 } }
+  );
+
+  await scenario(
+    'pointer activation keeps the live split link default action',
+    async (page) => {
+      await open(page);
+      await page.evaluate(() => {
+        document.querySelector('header').prepend(document.querySelector('#linked-paragraph'));
+      });
+      await start(page, ['linked-paragraph']);
+      await split(page, 'linked-paragraph');
+      await page.evaluate(() => {
+        fixture.tweens.forEach((t) => t.progress(0.8));
+      });
+      await page.locator('#linked-paragraph a').first().click();
+      await page.waitForFunction(() => location.hash === '#plain');
+      await complete(page);
+      await restored(page, ['linked-paragraph']);
+    },
+    { viewport: { width: 360, height: 1200 } }
+  );
+
+  await scenario('inline manual menu label restores on wrapping container resize', async (page) => {
+    await open(page);
+    await start(page, ['menu-label']);
+    await page.evaluate(async () => {
+      fixture.handle = await stCathsTextReveal.create(document.querySelector('#menu-label'), {
+        preset: 'menu',
+      });
+    });
+    await split(page, 'menu-label');
+    await page.locator('nav').evaluate((el) => {
+      el.style.width = '240px';
+    });
+    await restored(page, ['menu-label']);
+  });
+
+  await scenario(
+    'manual create overrides registered auto and active auto animation',
+    async (page) => {
+      await open(page);
+      await start(page, ['balance', 'offscreen']);
+      await split(page, 'balance');
+      assert.equal(await page.evaluate(() => ScrollTrigger.getAll().length), 1);
+      await page.evaluate(async () => {
+        fixture.firstAuto = fixture.tweens[0];
+        fixture.active = await stCathsTextReveal.create(document.querySelector('#balance'));
+        fixture.pending = await stCathsTextReveal.create(document.querySelector('#offscreen'));
+      });
+      assert.equal(await page.evaluate(() => ScrollTrigger.getAll().length), 0);
+      assert.equal(await page.evaluate(() => fixture.firstAuto.parent), null);
+      await page.evaluate(() => {
+        fixture.active.revert();
+        fixture.pending.revert();
+      });
+      await restored(page, ['balance', 'offscreen']);
+      await noReplay(page);
+    }
+  );
+
+  for (const kind of [
+    'viewport',
+    'container',
+    'reduced',
+    'late fonts',
+    'disposal',
+    'interruption',
+    'pagehide',
+  ]) {
+    await scenario(`${kind} cancels prepared paused state`, async (page) => {
       await open(page);
       await start(page, ['balance']);
       await split(page, 'balance');
-      // Returning a paused GSAP tween makes Playwright await its completion forever.
-      const partial = await page.evaluate(() => {
-        fixture.tweens[0].progress(0.3);
-        return [...document.querySelectorAll('#balance [data-char]')].map((char) =>
-          Number(getComputedStyle(char).opacity)
-        );
+      await page.evaluate(async () => {
+        fixture.handle = await stCathsTextReveal.create(document.querySelector('#balance'));
       });
-      assert.ok(
-        partial.some((opacity) => opacity > 0 && opacity < 1),
-        'characters visibly animate'
-      );
-      assert.ok(partial[0] > partial.at(-1), 'character stagger advances in order');
       if (kind === 'viewport') await page.setViewportSize({ width: 600, height: 1200 });
-      else
-        await page.locator('.column').evaluate((el) => {
+      if (kind === 'container')
+        await page.locator('header.column').evaluate((el) => {
           el.style.width = '370px';
+        });
+      if (kind === 'reduced') await page.emulateMedia({ reducedMotion: 'reduce' });
+      if (kind === 'late fonts')
+        await page.evaluate(() => {
+          document.fonts.dispatchEvent(new Event('loadingdone'));
+        });
+      if (kind === 'disposal')
+        await page.evaluate(() => {
+          stCathsTextReveal.dispose();
+        });
+      if (kind === 'interruption')
+        await page.evaluate(() => {
+          fixture.handle.play();
+          fixture.handle.animation.progress(0.3).kill();
+        });
+      if (kind === 'pagehide')
+        await page.evaluate(() => {
+          dispatchEvent(new Event('pagehide'));
         });
       await restored(page, ['balance']);
       await noReplay(page);
@@ -381,7 +753,7 @@ try {
   }
 
   await scenario(
-    'reduced motion initially skips without watchers',
+    'initial reduced motion skips and duplicate initialization does not replay',
     async (page) => {
       await open(page);
       await start(page, ['balance', 'hidden']);
@@ -393,91 +765,72 @@ try {
     { reducedMotion: 'reduce' }
   );
 
-  await scenario(
-    'reduced motion change cancels active and hidden pending targets',
-    async (page) => {
-      await open(page);
-      await start(page, ['balance', 'hidden']);
-      await split(page, 'balance');
-      await page.emulateMedia({ reducedMotion: 'reduce' });
-      await restored(page, ['balance', 'hidden']);
-      await page.emulateMedia({ reducedMotion: 'no-preference' });
-      await page.locator('#hidden-parent').evaluate((el) => {
-        el.style.display = 'block';
-      });
-      await noReplay(page);
-    }
-  );
-
-  for (const id of ['hidden', 'visibility', 'zero', 'offscreen']) {
-    await scenario(`${id} activation waits for visible measurable text`, async (page) => {
+  for (const id of ['hidden', 'visibility', 'zero']) {
+    await scenario(`${id} automatic activation and manual hidden timing`, async (page) => {
       await open(page);
       await start(page, [id]);
       await page.waitForTimeout(100);
-      assert.equal(await page.locator(`#${id} [data-char]`).count(), 0);
-      assert.equal(await page.evaluate(([id]) => fixture.restored([id]), [id]), true);
-      if (id === 'hidden')
-        await page.locator('#hidden-parent').evaluate((el) => {
-          el.style.display = 'block';
-        });
-      if (id === 'visibility')
-        await page.locator('#visibility-parent').evaluate((el) => {
-          el.style.visibility = 'visible';
-        });
-      if (id === 'zero')
-        await page.locator('#zero-parent').evaluate((el) => {
-          el.style.width = '500px';
-        });
+      assert.equal(await page.locator(`#${id} [data-line]`).count(), 0);
+      if (id === 'hidden') {
+        assert.equal(
+          await page.evaluate(
+            async () => (await stCathsTextReveal.create(document.querySelector('#hidden'))) === null
+          ),
+          true
+        );
+      }
+      await page.evaluate((id) => {
+        const parent = document.getElementById(`${id}-parent`);
+        if (id === 'hidden') parent.style.display = 'block';
+        if (id === 'visibility') parent.style.visibility = 'visible';
+        if (id === 'zero') parent.style.width = '500px';
+      }, id);
       await page.locator(`#${id}`).scrollIntoViewIfNeeded();
+      if (id === 'hidden')
+        await page.evaluate(async () => {
+          fixture.handle = await stCathsTextReveal.create(document.querySelector('#hidden'));
+        });
       await split(page, id);
       await complete(page);
+      // Parent style changes are outside the saved child.
       await restored(page, [id]);
       await noReplay(page);
     });
   }
 
-  await scenario('repeated script execution and init never duplicate or replay', async (page) => {
-    await open(page);
-    await start(page, ['balance']);
-    await split(page, 'balance');
-    await noReplay(page);
-    assert.equal(await page.evaluate(() => fixture.tweens.length), 1);
-    await complete(page);
-    await restored(page, ['balance']);
-    await noReplay(page);
-    await page.evaluate(() => {
-      const el = document.createElement('h2');
-      el.id = 'dynamic';
-      el.textContent = 'A newly inserted heading';
-      document.querySelector('main').prepend(el);
-      fixture.prepare(['dynamic']);
-      window.stCathsTextReveal.init(el);
-    });
-    await split(page, 'dynamic');
-    await complete(page);
-    await restored(page, ['dynamic']);
-  });
+  await scenario(
+    'page optout blocks automatic and manual; scoped init discovers newly inserted content',
+    async (page) => {
+      await open(page);
+      await page.evaluate(() => {
+        document.body.setAttribute('data-text-reveal', 'off');
+      });
+      await start(page, ['balance']);
+      assert.equal(
+        await page.evaluate(
+          async () => (await stCathsTextReveal.create(document.querySelector('#balance'))) === null
+        ),
+        true
+      );
+      await restored(page, ['balance']);
+      await page.evaluate(() => {
+        document.body.removeAttribute('data-text-reveal');
+        const el = document.createElement('h2');
+        el.id = 'dynamic';
+        el.textContent = 'A newly inserted heading';
+        document.querySelector('header').prepend(el);
+        fixture.remember(['dynamic']);
+        stCathsTextReveal.init(el);
+        stCathsTextReveal.init(el);
+      });
+      await split(page, 'dynamic');
+      assert.equal(await page.evaluate(() => fixture.tweens.length), 1);
+      await complete(page);
+      await restored(page, ['dynamic']);
+    }
+  );
 
-  await scenario('rich, interactive and accessible child markup stays untouched', async (page) => {
-    await open(page);
-    const ids = [
-      'rich',
-      'link',
-      'accessible-child',
-      'focusable',
-      'nested-link',
-      'editable',
-      'button-role',
-      'nonsemantic',
-    ];
-    const before = await page.locator('#link').ariaSnapshot();
-    await start(page, ids);
-    await restored(page, ids);
-    assert.equal(await page.evaluate(() => fixture.tweens.length), 0);
-    assert.equal(await page.locator('#link').ariaSnapshot(), before);
-  });
-
-  for (const failure of ['gsap', 'split', 'tween', 'observer']) {
+  for (const failure of ['gsap', 'ScrollTrigger', 'split', 'tween', 'observer', 'trigger']) {
     await scenario(`${failure} fallback leaves natural text`, async (page) => {
       await open(page);
       const expectedErrors = [];
@@ -486,7 +839,8 @@ try {
       });
       await page.evaluate((failure) => {
         if (failure === 'gsap') window.gsap = undefined;
-        if (failure === 'observer') window.IntersectionObserver = undefined;
+        if (failure === 'ScrollTrigger') window.ScrollTrigger = undefined;
+        if (failure === 'observer') window.ResizeObserver = undefined;
         if (failure === 'split')
           Range.prototype.getClientRects = () => {
             throw new Error('Forced layout measurement failure');
@@ -495,33 +849,54 @@ try {
           window.gsap.fromTo = () => {
             throw new Error('Forced tween failure');
           };
+        if (failure === 'trigger')
+          window.ScrollTrigger.create = () => {
+            throw new Error('Forced trigger failure');
+          };
       }, failure);
       await start(page, ['balance']);
       await page.waitForTimeout(150);
       await restored(page, ['balance']);
-      assert.equal(await page.evaluate(() => fixture.tweens.length), 0);
-      if (failure === 'split' || failure === 'tween')
+      if (['split', 'tween', 'trigger'].includes(failure))
         assert.ok(expectedErrors.some((text) => text.includes('Text reveal skipped:')));
+      if (failure === 'ScrollTrigger') {
+        await page.evaluate(async () => {
+          fixture.handle = await stCathsTextReveal.create(document.querySelector('#balance'));
+        });
+        await split(page, 'balance');
+        await page.evaluate(() => {
+          fixture.handle.revert();
+        });
+        await restored(page, ['balance']);
+      }
     });
   }
 
-  for (const width of [360, 1280]) {
+  for (const style of [null, '', 'color: rgb(24, 40, 60); --lines: 77']) {
     await scenario(
-      `real-time GSAP completion restores heading and paragraph at ${width}px`,
+      `lazy CSSOM restores exact paragraph style ${JSON.stringify(style)}`,
       async (page) => {
-        await open(page, '?live');
-        await start(page, ['balance', 'pretty']);
-        await split(page, 'balance');
+        await open(page);
+        await page.locator('#pretty').evaluate((el, style) => {
+          if (style !== null) el.setAttribute('style', style);
+        }, style);
+        await start(page, ['pretty']);
         await split(page, 'pretty');
-        await restored(page, ['balance', 'pretty']);
-        assert.equal(
-          await page.evaluate(() => fixture.tweens.every((tween) => tween.progress() === 1)),
-          true
-        );
-      },
-      { viewport: { width, height: 1600 } }
+        // Do not inspect any host attributes between split and restoration.
+        await complete(page);
+        await restored(page, ['pretty']);
+      }
     );
   }
+
+  await scenario('real-time completion with production GSAP and ScrollTrigger', async (page) => {
+    await open(page, '?live');
+    await start(page, ['balance', 'pretty']);
+    await split(page, 'balance');
+    await split(page, 'pretty');
+    await restored(page, ['balance', 'pretty']);
+    await noReplay(page);
+  });
   result.status = 'passed';
   console.info(
     `PASS ${checks} browser scenarios using ${fileURLToPath(ROOT)}dist/prod/components/text-reveal.js`

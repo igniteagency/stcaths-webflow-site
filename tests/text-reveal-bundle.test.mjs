@@ -3,12 +3,18 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-test('the opt-in loader keeps Kugiri in the standalone component and never bundles GSAP', async () => {
+test('global selector stays shared and lightweight; only the component bundles Kugiri and none bundle GSAP', async () => {
   const globalSource = await readFile(new URL('../src/global.ts', import.meta.url), 'utf8');
   assert.match(
     globalSource,
-    /conditionalLoadScript\('\[data-text-reveal="chars"\]', 'components\/text-reveal\.js'\)/
+    /conditionalLoadScript\(TEXT_REVEAL_SELECTOR, 'components\/text-reveal\.js'\)/
   );
+  const settings = await readFile(
+    new URL('../src/utils/text-motion-settings.ts', import.meta.url),
+    'utf8'
+  );
+  assert.match(settings, /h1,h2,h3,h4,h5,h6,p,/);
+  assert.match(settings, /text-style-eyebrow/);
   const { metafile } = await build({
     entryPoints: ['src/entry.ts', 'src/global.ts', 'src/components/text-reveal.ts'],
     bundle: true,
