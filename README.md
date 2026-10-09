@@ -393,6 +393,36 @@ native navigation at 1440/820/667/390px. `MENU_EVIDENCE_DIR` selects the screens
 `MENU_WIDTH` optionally selects one width. Re-run without browser overrides after the approved
 GitHub merge and Webflow publish to verify deployment.
 
+### Divider reveals
+
+`global.js` loads `components/divider.js` when `[data-divider-reveal]` is present.
+The shared Webflow `Atom / Divider` carries `data-divider-reveal=""` on its root
+and owns a `component-style` embed containing the reveal CSS. Horizontal lines
+grow from the centre over 1.8s; Vertical variants grow from the bottom over 0.9s,
+both with `cubic-bezier(.65,0,.35,1)` easing. Their existing shape and layout remain
+native. No CSS file or mirrored embed fixture is stored in this repository.
+
+Dividers reveal once at 15% visibility. Existing `[data-pathways-rules]` sections
+reveal as a group; vertical delays match when the centre-out baseline reaches
+each divider's position. Existing `[data-pathways-rule="row"]` origins keep paired
+row separators drawing outward together, with their own visibility trigger so
+stacked mobile separators wait until reached. Hidden group dividers are settled
+without animation, and resize settles any active group. Reduced motion and page
+exit reveal everything immediately. Missing CSS or JS leaves native lines visible.
+
+Switching-tab progress dividers keep their existing timer animation: the embed
+sets their `--divider-motion` flag to `0`. Other dividers use `1`; the script checks
+that flag before preparing a reveal. `data-divider-reveal="false"` opts out when
+needed. Runtime `data-divider-state` and `--divider-delay` values are script-owned.
+
+`bun run qa:divider` checks the homepage and Senior School page at four widths,
+both axes, original geometry, repeat scrolling, interruptions and missing-dependency
+fallbacks. Set `DIVIDER_COMPONENT_EMBED_PATH` to a temporary export outside this
+repository for unpublished styling. `DIVIDER_WIDTH` selects one width;
+`DIVIDER_EVIDENCE_DIR` selects output. `DIVIDER_LIVE=1` verifies published assets
+without local HTML/JS overrides. Browser paths use `PLAYWRIGHT_MODULE` and
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE`.
+
 ### Academic results
 
 `global.js` loads `components/statistics.js` when `[data-statistics]` is present.
