@@ -129,7 +129,7 @@ every individual refresh, including targets registered after page load; its uppe
 pixel before maximum scroll so `onEnter` can fire. Preparation checks the trigger’s actual numeric
 start and scroll position. Footer text therefore reveals at maximum scroll without a bottom spacer. H1 follows exactly the same rule; any measurable target already past that threshold
 starts after fonts are ready without another scroll. Content stays native until preparation.
-There are **no** page-load/hero, menu-open, dialog, click or custom-event animation bindings.
+The text-reveal component itself has **no** page-load/hero, menu-open, dialog, click or custom-event animation bindings. The separate navigation-menu controller below uses its manual factory.
 
 Opt out on an element, section, or page; these also block manual `create()`:
 
@@ -312,6 +312,52 @@ activation, restoration/identity, replay, reduced motion, touch, cancellation, d
 dependency fallbacks. It never seeks or pauses the WAAPI animations. Browser checks remain pending
 until that runner passes; a sandbox denial is a failure record, not a pass, and must not be retried
 inside the coding sandbox.
+
+### Navigation menu transitions
+
+`global.js` loads `components/nav-menu.js` after the text-reveal component when
+`[data-menu-motion]` is present. It uses the existing manual `menu` preset for word reveals,
+with 55ms between rows. Submenu entry and Back first fade/lift the outgoing rows for
+180ms with a 25ms stagger, change the native details state, then reveal the new labels.
+The navigation menu's summaries alone delay their toggle for this exit; ordinary accordions,
+links, search submission and native popover open/close controls are unchanged.
+
+Webflow owns the markup and styles. In `Component / Nav Menu`:
+
+| Element/class | Attribute |
+| --- | --- |
+| `nav-menu_wrapper` | `data-menu-motion=""`, `data-text-trigger="manual"` |
+| `nav-menu_group` | `data-details-animate="false"` (opt out of the shared accordion height effect) |
+| `nav-menu_link-text` | `data-menu-label=""` |
+| `nav-menu_heading` / `nav-menu_back` | `data-menu-heading=""` / `data-menu-back=""` |
+| `nav-menu_expand-icon` / `nav-menu_arrow-icon` | `data-menu-icon=""` |
+| `nav-menu_ornament` | `data-menu-ornament=""` |
+| Links wrapper, image, quick links, footer, top controls | `data-menu-surface="navigation\|image\|quicklinks\|footer\|top"` respectively |
+
+Keep the existing `[data-nav-menu-popover]`, `[data-el="nav-group-list"]` and
+`data-menu-section` hooks. Append `webflow/nav-menu-motion.css` to the menu's existing
+`component-style` embed; it is a source copy for Webflow, not a runtime-loaded stylesheet.
+The CSS uses native popover states, `@starting-style` and discrete `display`/`overlay`
+transitions because these selectors and top-layer behavior cannot be expressed by ordinary
+Designer states. The surface opens in 550ms and closes in 450ms, with a 200ms content exit.
+Browsers without those CSS features keep native instantaneous surface changes.
+
+The runtime readiness attribute gates the CSS enhancement. Missing dependencies leave a usable
+native menu. Reduced motion skips transitions; enabling it or resizing mid-transition restores
+readable text and settles the requested submenu. Native Escape/close interrupts immediately;
+the CSS exit retains the painted surface without delaying native focus restoration. Reopening
+starts at the main menu. Text is restored after each reveal and recreated on the next interaction.
+The controller lets two animation frames settle after a details state change before asking the text factory to
+measure its newly paintable contents.
+
+Run `bun run qa:nav-menu` with Playwright available via `PLAYWRIGHT_MODULE` and a Chrome executable
+via `PLAYWRIGHT_CHROMIUM_EXECUTABLE`. The runner opens the real published homepage in an isolated
+browser, substitutes local production JS, and applies the matching Webflow attributes/CSS only
+inside that browser. It does not publish or edit the site. It checks all five submenus, Back,
+partial opening/closing, keyboard focus and Escape, rapid closing, resize, reduced motion and
+native navigation at 1440/820/667/390px. `MENU_EVIDENCE_DIR` selects the screenshot/results directory;
+`MENU_WIDTH` optionally selects one width. Re-run without browser overrides after the approved
+GitHub merge and Webflow publish to verify deployment.
 
 ### Switching tabs
 
