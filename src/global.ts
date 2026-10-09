@@ -42,6 +42,11 @@ function UIFunctions() {
       ?.setAttribute('data-text-trigger', 'manual');
   }
   window.conditionalLoadScript('.button_link', 'components/button-text.js');
+  if (document.querySelector('[data-statistics]')) {
+    void window
+      .loadScript('components/statistics.js')
+      .catch((error) => console.error('Statistic motion unavailable:', error));
+  }
   if (document.querySelector(TEXT_REVEAL_SELECTOR + ',[data-menu-motion],[data-hero-intro]')) {
     void window
       .loadScript('components/text-reveal.js')
