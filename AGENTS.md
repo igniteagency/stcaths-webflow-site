@@ -6,6 +6,8 @@ This file provides guidance to coding agents (Claude Code, Codex, and others) wh
 
 This is a Webflow JavaScript starter project where JavaScript/TypeScript is authored and managed separately from HTML/CSS (which remain in Webflow). Scripts are not bundled into a single file - each script is loaded individually per page as needed, with only `src/entry.ts` (built as `entry.js`) loaded globally. The system uses esbuild for building and serves scripts from either localhost during development or jsDelivr CDN in production.
 
+Component CSS belongs in that component's Webflow embed; behavior and programmatic animation belong in its `.ts` component file. Do not commit separate CSS files or mirrored CSS fixtures. Browser QA can read a temporary export of the Webflow embed from outside the repository.
+
 **Think carefully and only action the specific task I have given you with the most concise and elegant solution that changes as little code as possible.**
 
 ## Key Architecture Concepts

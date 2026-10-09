@@ -6,6 +6,9 @@ import { pathToFileURL } from 'node:url';
 const ROOT = new URL('../', import.meta.url);
 const EVIDENCE = resolve(process.env.MENU_EVIDENCE_DIR ?? '/tmp/stcaths-menu-evidence');
 const SITE = 'https://st-catherines-school.webflow.io/';
+const componentEmbed = process.env.MENU_COMPONENT_EMBED_PATH
+  ? await readFile(resolve(process.env.MENU_COMPONENT_EMBED_PATH), 'utf8')
+  : '';
 const MARKERS = {
   'nav-menu_wrapper': { 'data-menu-motion': '', 'data-text-trigger': 'manual' },
   'nav-menu_link-text': { 'data-menu-label': '' },
@@ -35,7 +38,6 @@ const browser = await chromium.launch({
   headless: true,
   chromiumSandbox: true,
 });
-const css = await readFile(new URL('webflow/nav-menu-motion.css', ROOT), 'utf8');
 const results = [];
 try {
   for (const width of process.env.MENU_WIDTH
@@ -63,7 +65,7 @@ try {
               .join('')
           );
         })
-        .replace('</head>', `<style>${css}</style></head>`);
+        .replace('</head>', `${componentEmbed}</head>`);
       await route.fulfill({ response, body: html });
     });
     await page.goto(SITE, { waitUntil: 'networkidle' });

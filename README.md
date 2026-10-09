@@ -335,8 +335,8 @@ Webflow owns the markup and styles. In `Component / Nav Menu`:
 | Links wrapper, image, quick links, footer, top controls | `data-menu-surface="navigation\|image\|quicklinks\|footer\|top"` respectively |
 
 Keep the existing `[data-nav-menu-popover]`, `[data-el="nav-group-list"]` and
-`data-menu-section` hooks. Append `webflow/nav-menu-motion.css` to the menu's existing
-`component-style` embed; it is a source copy for Webflow, not a runtime-loaded stylesheet.
+`data-menu-section` hooks. The menu's existing Webflow `component-style` embed owns
+the CSS; there is no stylesheet or mirrored CSS fixture in this repository.
 The CSS uses native popover states, `@starting-style` and discrete `display`/`overlay`
 transitions because these selectors and top-layer behavior cannot be expressed by ordinary
 Designer states. The surface opens in 550ms and closes in 450ms, with a 200ms content exit.
@@ -352,8 +352,11 @@ measure its newly paintable contents.
 
 Run `bun run qa:nav-menu` with Playwright available via `PLAYWRIGHT_MODULE` and a Chrome executable
 via `PLAYWRIGHT_CHROMIUM_EXECUTABLE`. The runner opens the real published homepage in an isolated
-browser, substitutes local production JS, and applies the matching Webflow attributes/CSS only
-inside that browser. It does not publish or edit the site. It checks all five submenus, Back,
+browser, substitutes local production JS, and applies the matching Webflow attributes only
+inside that browser. To test unpublished styling, export the component's current Webflow embed
+to a temporary HTML file outside the repository and set `MENU_COMPONENT_EMBED_PATH` to that file.
+Otherwise the runner uses the published Webflow styles. It does not publish or edit the site.
+It checks all five submenus, Back,
 partial opening/closing, keyboard focus and Escape, rapid closing, resize, reduced motion and
 native navigation at 1440/820/667/390px. `MENU_EVIDENCE_DIR` selects the screenshot/results directory;
 `MENU_WIDTH` optionally selects one width. Re-run without browser overrides after the approved
