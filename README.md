@@ -90,6 +90,10 @@ outgoing text fades for 200ms, incoming headings and paragraphs start their shar
 at 220ms, and the existing 950ms image slide starts at 300ms. Each image transition finishes
 before catching up to the latest scroll destination. Reverse scrolling reverses the image
 direction. Pending text masks release to `clip-path: none`; the action fades in over 200ms.
+Between panel changes, each moment's `--portrait-drift` follows scroll progress from +5px to
+−5px. The Webflow embed applies this to the existing inner `.image` at 1.04× scale, keeping
+the crop covered while the outer image frame continues to own the timed slide. The drift
+reverses with scrolling and is removed when the sticky enhancement is disabled.
 
 Inactive panels are inert and hidden from assistive technology. Mobile, short viewports,
 oversized copy and reduced motion retain complete articles in normal flow. Static-layout
