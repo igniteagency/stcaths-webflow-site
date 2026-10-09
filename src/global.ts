@@ -42,6 +42,11 @@ function UIFunctions() {
       ?.setAttribute('data-text-trigger', 'manual');
   }
   window.conditionalLoadScript('.button_link', 'components/button-text.js');
+  if (document.querySelector('[data-nav-wordmark]')) {
+    void window
+      .loadScript('components/nav-wordmark.js')
+      .catch((error) => console.error('Navigation wordmark motion unavailable:', error));
+  }
   if (document.querySelector('[data-divider-reveal]')) {
     void window
       .loadScript('components/divider.js')
