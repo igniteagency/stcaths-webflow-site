@@ -66,6 +66,10 @@ function UIFunctions() {
         if (document.querySelector('[data-footer-reveal]'))
           return window.loadScript('components/footer.js');
       })
+      .then(() => {
+        if (document.querySelector('[data-portrait-scroll]'))
+          return window.loadScript('components/portrait-scroll.js');
+      })
       .catch((error) => console.error('Text motion unavailable:', error));
   }
   window.conditionalLoadScript(
