@@ -8,6 +8,8 @@ This is a Webflow JavaScript starter project where JavaScript/TypeScript is auth
 
 Component CSS belongs in that component's Webflow embed; behavior and programmatic animation belong in its `.ts` component file. Do not commit separate CSS files or mirrored CSS fixtures. Browser QA can read a temporary export of the Webflow embed from outside the repository.
 
+Text preparation masks must release completely (`clip-path: none`) when a reveal starts; `inset(0)` still clips rising glyphs and blur. Check intermediate animation frames as well as the final state.
+
 When working on JavaScript/TypeScript in this repository, always report exactly what was changed in Webflow in the final handoff. Name the affected site/page and component, identify the elements, list attribute names and values, and describe each embed/CSS, style, setting, property or structure change (including animation timings where relevant). State whether changes were saved only or actually published. Do not summarize this merely as "hooks and CSS updated." If no Webflow edits were made, explicitly say "No Webflow changes." This is a reporting requirement, not an additional approval step.
 
 The user has authorized publishing completed, verified Webflow changes to `st-catherines-school.webflow.io` after each task so they can review them. The site is currently pre-launch: publish to the Webflow subdomain without asking again, verify the published result, and report publication in the handoff. This authorization does not extend to launching a custom domain; revisit it if the site's launch status changes.
