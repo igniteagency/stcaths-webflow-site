@@ -8,6 +8,8 @@ This is a Webflow JavaScript starter project where JavaScript/TypeScript is auth
 
 Component CSS belongs in that component's Webflow embed; behavior and programmatic animation belong in its `.ts` component file. Do not commit separate CSS files or mirrored CSS fixtures. Browser QA can read a temporary export of the Webflow embed from outside the repository.
 
+When working on JavaScript/TypeScript in this repository, always report exactly what was changed in Webflow in the final handoff. Name the affected site/page and component, identify the elements, list attribute names and values, and describe each embed/CSS, style, setting, property or structure change (including animation timings where relevant). State whether changes were saved only or actually published. Do not summarize this merely as "hooks and CSS updated." If no Webflow edits were made, explicitly say "No Webflow changes." This is a reporting requirement, not an additional approval step.
+
 **Think carefully and only action the specific task I have given you with the most concise and elegant solution that changes as little code as possible.**
 
 ## Key Architecture Concepts
