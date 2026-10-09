@@ -37,7 +37,12 @@ function UIFunctions() {
   duplicateMarqueeList();
   initDetailsGroups();
   window.conditionalLoadScript('.button_link', 'components/button-text.js');
-  window.conditionalLoadScript(TEXT_REVEAL_SELECTOR, 'components/text-reveal.js');
+  if (document.querySelector(TEXT_REVEAL_SELECTOR + ',[data-menu-motion]')) {
+    void window
+      .loadScript('components/text-reveal.js')
+      .then(() => window.conditionalLoadScript('[data-menu-motion]', 'components/nav-menu.js'))
+      .catch((error) => console.error('Text motion unavailable:', error));
+  }
   window.conditionalLoadScript(
     '[data-el="switching-tabs-component"], .switcing-tabs_component, .switching-tabs_component',
     'components/switching-tabs.js'

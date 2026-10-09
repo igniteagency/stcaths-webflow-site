@@ -5,10 +5,7 @@ import test from 'node:test';
 
 test('global selector stays shared and lightweight; only the component bundles Kugiri and none bundle GSAP', async () => {
   const globalSource = await readFile(new URL('../src/global.ts', import.meta.url), 'utf8');
-  assert.match(
-    globalSource,
-    /conditionalLoadScript\(TEXT_REVEAL_SELECTOR, 'components\/text-reveal\.js'\)/
-  );
+  assert.match(globalSource, /querySelector\(TEXT_REVEAL_SELECTOR \+ ',\[data-menu-motion\]'\)/);
   const settings = await readFile(
     new URL('../src/utils/text-motion-settings.ts', import.meta.url),
     'utf8'
@@ -16,7 +13,12 @@ test('global selector stays shared and lightweight; only the component bundles K
   assert.match(settings, /h1,h2,h3,h4,h5,h6,p,/);
   assert.match(settings, /text-style-eyebrow/);
   const { metafile } = await build({
-    entryPoints: ['src/entry.ts', 'src/global.ts', 'src/components/text-reveal.ts'],
+    entryPoints: [
+      'src/entry.ts',
+      'src/global.ts',
+      'src/components/text-reveal.ts',
+      'src/components/nav-menu.ts',
+    ],
     bundle: true,
     write: false,
     outdir: 'dist/prod',
