@@ -36,6 +36,7 @@ function initComponents() {
 function UIFunctions() {
   duplicateMarqueeList();
   initDetailsGroups();
+  window.conditionalLoadScript('.button_link', 'components/button-text.js');
   window.conditionalLoadScript(TEXT_REVEAL_SELECTOR, 'components/text-reveal.js');
   window.conditionalLoadScript(
     '[data-el="switching-tabs-component"], .switcing-tabs_component, .switching-tabs_component',

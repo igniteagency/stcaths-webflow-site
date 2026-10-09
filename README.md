@@ -258,6 +258,61 @@ only when created by this component; Playwright polling is excluded. The runner 
 GSAP tween from `page.evaluate` because tweens are thenable. Separate lazy-CSSOM cases avoid host
 attribute reads while split, preserving the style-restoration regression test.
 
+### Button text roll
+
+`global.js` conditionally loads `components/button-text.js` on `.button_link`. Each link owns
+`.button_text` labels in its nearest `.button_component`, including the Webflow sibling overlay
+structure; nested components are excluded. Direct labels inside `.button_link` links/buttons also
+work. Automatic text reveal excludes `.button_text` and descendants; its manual factory is unchanged.
+
+The concept letter roll uses native WAAPI: 500ms, 25ms per grapheme, `cubic-bezier(.16,1,.3,1)`,
+`fill: both`, outgoing `0 → -150%` and incoming `150% → 0`. Pointer enter **and** leave trigger it
+only for fine hover pointers excluding touch; focus and blur work on all pointer types. A playing
+cycle queues at most one replay and restores after both `560 + letterCount * 25` ms and every native
+animation's `finished` promise have completed. The timer is a minimum; compositor delays cannot cut
+off the last letters. Native activation, control attributes, authored accessible names, icons and focus
+stay intact.
+
+Inherited `data-button-text="off"`, `data-text-reveal="off"`, `data-no-text-motion` or
+`data-no-heading-motion` disable it (including on `body`). `data-text-trigger="manual"` only controls
+scroll reveal. Disabled/inert controls, empty/missing labels and complex or interactive label contents
+stay native. Initially supported labels contain only text/comments; rich labels are intentionally
+skipped. Non-horizontal text, wrapped inline labels and flex/grid label containers also stay native.
+
+Original nodes retain their native flow in a temporary invisible span, preserving spacing and wrapping;
+measured glyph copies are aria-hidden and one hidden text alternative remains inside the label.
+The original nodes and exact inline style return on completion or cancellation. Font readiness is
+awaited; enabling reduced motion, viewport/container resize, font changes, disposal and pagehide cancel
+active work and drop replay. Native `Intl.Segmenter` is used when available, otherwise `Array.from`.
+Missing WAAPI, usable `Animation.finished` promises or ResizeObserver leaves native text. Rejected
+completion promises restore the label and drop replay. There are no animation dependencies or component stylesheets.
+
+For dynamic content, call `window.stCathsButtonText?.init(container)` after insertion and
+`window.stCathsButtonText?.dispose(container)` before removal. Both include the root control;
+repeated init/script loads are idempotent. Load via `await window.loadScript('components/button-text.js')`
+if no original controls caused the conditional load. Do not run the manual text-reveal factory or
+edit label contents/styles during a roll. Idle controls retain only their interaction listeners and
+shared preference/pagehide listeners; size/font/resize resources exist only during work.
+
+Run `node --test tests/*.test.mjs` and `bun run build`, then have the parent run real Chromium QA:
+
+```sh
+PLAYWRIGHT_MODULE=/Users/iggy/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs \
+PLAYWRIGHT_CHROMIUM_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+BUTTON_TEXT_EVIDENCE_DIR=/Volumes/Sandisk-2TB-SSD/hermes/outputs/stcaths-button-text-motion/final \
+bun run qa:button-text
+```
+
+The runner serves the actual production button/text-reveal bundles, the local Libre Franklin variable
+font and installed GSAP/ScrollTrigger assets from `node_modules/gsap/dist`. Override paths with `BUTTON_TEXT_FONT_PATH`,
+`TEXT_REVEAL_GSAP_PATH`, `TEXT_REVEAL_SCROLLTRIGGER_PATH`; optionally filter with
+`BUTTON_TEXT_SCENARIO`. It writes screenshots, full AX trees, state JSON and `run-result.json` with
+bundle/asset hashes, real partial progress/completion, typography at 360/768/1280, scope, native
+activation, restoration/identity, replay, reduced motion, touch, cancellation, dynamic content and
+dependency fallbacks. It never seeks or pauses the WAAPI animations. Browser checks remain pending
+until that runner passes; a sandbox denial is a failure record, not a pass, and must not be retried
+inside the coding sandbox.
+
 ### Switching tabs
 
 `Section / Switching Tabs` nests each panel `details` so they are not direct siblings. `details.ts` therefore cannot exclusive-group them. `global.js` loads `components/switching-tabs.js` when the component is on the page.

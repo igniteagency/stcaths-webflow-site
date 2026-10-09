@@ -24,6 +24,24 @@ const { outputFiles } = await build({
 });
 const source = outputFiles[0].text;
 
+for (const descendant of [false, true]) {
+  test(`button text ${descendant ? 'descendant' : 'label'} skips automatic reveal, keeps manual factory`, async () => {
+    const h = harness();
+    h.element.tagName = 'P';
+    const label = descendant ? new h.Element('DIV', []) : h.element;
+    label.setAttribute('class', 'button_text');
+    if (descendant) label.replaceChildren(h.element);
+    h.run();
+    await h.fontsReady();
+    assert.equal(h.triggers.length, 0);
+    assert.equal(h.tweens.length, 0);
+    const handle = await h.context.stCathsTextReveal.create(h.element);
+    assert.ok(handle);
+    handle.revert();
+    h.assertClean();
+  });
+}
+
 test('global H1 already past the start reveals without opt-in or another scroll', async () => {
   const h = harness();
   h.element.tagName = 'H1';

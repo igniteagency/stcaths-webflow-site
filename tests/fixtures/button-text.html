@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>St Catherine’s button text QA</title>
+    <style>
+      @font-face {
+        font-family: 'Libre Franklin QA';
+        src: url('/font.woff2') format('woff2');
+        font-weight: 100 900;
+        font-display: swap;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 24px;
+        background: #f8f6ef;
+        color: #202d43;
+        font-family: 'Libre Franklin QA', sans-serif;
+      }
+      main {
+        max-width: 1000px;
+        margin: auto;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 24px;
+        margin-block: 24px;
+        align-items: start;
+      }
+      .button_component {
+        position: relative;
+        width: fit-content;
+        max-width: 100%;
+        border: 1px solid #988151;
+        padding: 18px 24px;
+      }
+      .button_link {
+        color: inherit;
+      }
+      .button_component > .button_link {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+      }
+      .button_content-wrapper {
+        pointer-events: none;
+      }
+      .button_text {
+        margin: 0;
+        font:
+          500 clamp(13px, 2vw, 16px)/1.25 'Libre Franklin QA',
+          sans-serif;
+        letter-spacing: 0.04em;
+      }
+      .direct {
+        display: inline-block;
+        border: 1px solid #988151;
+        background: none;
+        padding: 18px 24px;
+      }
+      .direct .button_text {
+        display: inline;
+      }
+      .direct svg {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        margin-left: 8px;
+      }
+      #outer {
+        padding-bottom: 80px;
+      }
+      #inner {
+        position: relative;
+        z-index: 2;
+        margin-top: 20px;
+      }
+      #wrapped {
+        max-width: 240px;
+      }
+      #neighbor {
+        max-width: 600px;
+        margin-top: 100vh;
+      }
+      #destination {
+        margin-top: 20px;
+      }
+      .button_link:focus-visible {
+        outline: 3px solid #886622;
+        outline-offset: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1 data-text-reveal="off">Button letter roll</h1>
+      <div class="row">
+        <div class="button_component" id="overlay-component">
+          <a class="button_link" id="overlay" href="#destination" aria-label="Enquire"></a>
+          <div class="button_content-wrapper">
+            <p class="button_text" id="overlay-label">Enquire</p>
+          </div>
+        </div>
+        <a class="button_link direct" id="direct" href="#destination"
+          ><span class="button_text" id="direct-label" style="">Arrange a visit</span
+          ><svg aria-hidden="true" viewBox="0 0 12 12">
+            <path d="M1 6h10M7 2l4 4-4 4" fill="none" stroke="currentColor" /></svg
+        ></a>
+        <form action="/native-submit" method="get" target="submit-result">
+          <button class="button_link direct" id="native-button" name="action" value="tour">
+            <span class="button_text" id="button-label">Book a tour</span>
+          </button>
+        </form>
+      </div>
+      <div class="row">
+        <div class="button_component" id="outer">
+          <a class="button_link" id="outer-link" href="#destination" aria-label="Outer"></a>
+          <p class="button_text" id="outer-label">Outer</p>
+          <div class="button_component" id="inner">
+            <a
+              class="button_link"
+              id="inner-link"
+              href="#destination"
+              aria-labelledby="inner-label"
+            ></a>
+            <p class="button_text" id="inner-label">Inner</p>
+          </div>
+        </div>
+        <div class="button_component">
+          <a class="button_link" id="glyph" href="#destination" aria-labelledby="glyph-label"></a>
+          <p class="button_text" id="glyph-label" style="font-weight: 650; --authored: 7">
+            AV y 👩‍🎓 é
+          </p>
+        </div>
+        <div class="button_component" id="wrapped">
+          <a
+            class="button_link"
+            id="wrap-link"
+            href="#destination"
+            aria-label="Discover our school community"
+          ></a>
+          <p class="button_text" id="wrap-label">Discover our school community</p>
+        </div>
+      </div>
+      <div class="row" id="skips">
+        <button class="button_link direct" disabled>
+          <span class="button_text" id="disabled-label">Disabled</span>
+        </button>
+        <div inert>
+          <a class="button_link direct" href="#destination"
+            ><span class="button_text" id="inert-label">Inert</span></a
+          >
+        </div>
+        <div data-button-text="off">
+          <a class="button_link direct" href="#destination"
+            ><span class="button_text" id="off-label">Opt out</span></a
+          >
+        </div>
+        <a class="button_link direct" aria-disabled="true" href="#destination"
+          ><span class="button_text" id="aria-disabled-label">Unavailable</span></a
+        >
+        <a class="button_link direct" href="#destination"
+          ><span class="button_text" id="rich-label"
+            ><strong id="rich-child">Stateful rich label</strong></span
+          ></a
+        >
+        <a class="button_link direct" href="#destination"
+          ><span class="button_text" id="empty-label"> </span
+        ></a>
+        <a class="button_link direct" href="#destination" aria-label="Missing label"
+          >Missing label</a
+        >
+      </div>
+      <p id="destination" data-text-reveal="off">Native link destination</p>
+      <p id="neighbor">
+        This neighboring paragraph still uses the automatic scroll reveal while button labels remain
+        owned by their hover roll.
+      </p>
+      <iframe name="submit-result" title="Native form result" hidden></iframe>
+    </main>
+    <script src="/gsap.js"></script>
+    <script src="/ScrollTrigger.js"></script>
+    <script>
+      const native = new Map();
+      const calls = [];
+      const records = [];
+      const originalAnimate = Element.prototype.animate;
+      Element.prototype.animate = function (...args) {
+        const animation = originalAnimate.apply(this, args);
+        const record = {
+          animation,
+          target: this,
+          label: this.closest('.button_text')?.id,
+          startedAt: performance.now(),
+          finishedAt: null,
+          cancelledAt: null,
+        };
+        animation.finished.then(
+          () => {
+            record.finishedAt = performance.now();
+          },
+          () => {}
+        );
+        animation.addEventListener('cancel', () => {
+          record.cancelledAt = performance.now();
+        });
+        records.push(record);
+        return animation;
+      };
+      if (window.ScrollTrigger) {
+        const create = ScrollTrigger.create;
+        ScrollTrigger.create = function (options) {
+          calls.push(options.trigger.id);
+          return create.call(this, options);
+        };
+      }
+      const glyph = document.getElementById('glyph-label');
+      const suffix = glyph.firstChild.splitText(3);
+      glyph.insertBefore(document.createComment('preserve original nodes'), suffix);
+      let listenerCalls = 0;
+      glyph.addEventListener('qa-identity', () => listenerCalls++);
+      document.getElementById('rich-child').addEventListener('qa-identity', () => listenerCalls++);
+      function remember(root = document) {
+        for (const label of root.querySelectorAll('.button_text')) {
+          native.set(label.id, { label, html: label.outerHTML, nodes: [...label.childNodes] });
+        }
+      }
+      function clean(id) {
+        const before = native.get(id),
+          label = before.label;
+        return (
+          label.outerHTML === before.html &&
+          label.childNodes.length === before.nodes.length &&
+          before.nodes.every((node, i) => label.childNodes[i] === node)
+        );
+      }
+      function load(src) {
+        return new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = src;
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.append(script);
+        });
+      }
+      function geometry(id, nativeOnly = false) {
+        const label = document.getElementById(id),
+          walker = document.createTreeWalker(
+            nativeOnly ? label.firstElementChild : label,
+            NodeFilter.SHOW_TEXT
+          );
+        const bounds = label.getBoundingClientRect(),
+          glyphs = [];
+        let node;
+        while ((node = walker.nextNode())) {
+          let offset = 0;
+          for (const { segment } of new Intl.Segmenter(undefined, {
+            granularity: 'grapheme',
+          }).segment(node.data)) {
+            const range = document.createRange();
+            range.setStart(node, offset);
+            offset += segment.length;
+            range.setEnd(node, offset);
+            const box = range.getBoundingClientRect();
+            glyphs.push({
+              text: segment,
+              left: box.left,
+              top: box.top,
+              width: box.width,
+              height: box.height,
+            });
+          }
+        }
+        return {
+          width: bounds.width,
+          height: bounds.height,
+          left: bounds.left,
+          top: bounds.top,
+          glyphs,
+        };
+      }
+      window.fixture = {
+        native,
+        records,
+        calls,
+        remember,
+        clean,
+        load,
+        geometry,
+        get listenerCalls() {
+          return listenerCalls;
+        },
+        async start({ scroll = false } = {}) {
+          remember();
+          await load('/dist/prod/components/button-text.js');
+          if (scroll) await load('/dist/prod/components/text-reveal.js');
+        },
+        state() {
+          return {
+            now: performance.now(),
+            activeElement: document.activeElement.id,
+            reduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
+            hover: matchMedia('(hover: hover) and (pointer: fine)').matches,
+            fonts: document.fonts.status,
+            clean: Object.fromEntries([...native.keys()].map((id) => [id, clean(id)])),
+            triggers: calls,
+            records: records.map(({ animation, target, ...record }) => ({
+              ...record,
+              currentTime: animation.currentTime,
+              playState: animation.playState,
+              progress: animation.effect.getComputedTiming().progress,
+              timing: animation.effect.getTiming(),
+              keyframes: animation.effect.getKeyframes(),
+              transform: getComputedStyle(target).transform,
+            })),
+          };
+        },
+      };
+    </script>
+  </body>
+</html>

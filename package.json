@@ -13,7 +13,8 @@
   "scripts": {
     "dev": "cross-env NODE_ENV=development bun run ./bin/build.js",
     "build": "cross-env NODE_ENV=production bun run ./bin/build.js",
-    "qa:text-reveal": "node ./bin/qa-text-reveal.mjs"
+    "qa:text-reveal": "node ./bin/qa-text-reveal.mjs",
+    "qa:button-text": "node ./bin/qa-button-text.mjs"
   },
   "devDependencies": {
     "@finsweet/eslint-config": "^3.0.3",

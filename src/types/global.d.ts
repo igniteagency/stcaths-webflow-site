@@ -19,6 +19,10 @@ interface Webflow_IX3 extends Webflow.require {
 }
 
 declare global {
+  interface ButtonTextAPI {
+    init(root?: ParentNode): void;
+    dispose(root?: ParentNode): void;
+  }
   type TextRevealPreset = 'heading' | 'paragraph' | 'eyebrow' | 'menu';
   type TextRevealOptions = Partial<
     Record<
@@ -72,6 +76,7 @@ declare global {
     gsap: typeof GSAP;
     ScrollTrigger: typeof ScrollTrigger;
     stCathsTextReveal?: TextRevealAPI;
+    stCathsButtonText?: ButtonTextAPI;
     Webflow: Webflow;
     WF_IX: Webflow_IX3;
 

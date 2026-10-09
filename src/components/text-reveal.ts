@@ -29,6 +29,7 @@ function isSafe(element: HTMLElement, automatic: boolean) {
     (!role || role === 'heading' || role === 'paragraph') &&
     !element.closest(OFF) &&
     !element.closest(NON_TEXT) &&
+    !(automatic && element.closest('.button_text')) &&
     !element.matches(INTERACTIVE + ',[tabindex],' + NON_TEXT) &&
     !element.closest('[inert],[contenteditable]:not([contenteditable="false"])') &&
     !(automatic && element.closest(INTERACTIVE + ',[tabindex]:not([tabindex="-1"]),' + MANUAL)) &&
