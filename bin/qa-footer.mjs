@@ -39,7 +39,10 @@ async function open(width, height, path = '/', mode = 'normal') {
       if (!file || file.includes('..')) return route.continue();
       if (mode === 'blocked-js' && file === 'components/footer.js') return route.abort();
       await route.fulfill({
-        body: await readFile(new URL('dist/prod/' + file, ROOT)),
+        body:
+          (file === 'components/footer.js' && process.env.FOOTER_DELAY_TEXT
+            ? `(() => { const create = window.stCathsTextReveal.create; window.stCathsTextReveal.create = async (...args) => { await new Promise(resolve => setTimeout(resolve, 700)); return create(...args); }; })();`
+            : '') + (await readFile(new URL('dist/prod/' + file, ROOT), 'utf8')),
         contentType: 'text/javascript',
       });
     });
@@ -180,6 +183,16 @@ try {
       const playing = await state(page);
       assert.equal(playing.clip, 'none');
       assert(playing.split);
+      assert(
+        await page
+          .locator('[data-footer-reveal] h1,[data-footer-reveal] h2')
+          .evaluate((h) =>
+            window.gsap
+              .getTweensOf([...h.querySelectorAll('*')])
+              .some((t) => t.vars.ease === 'power4.out')
+          ),
+        'Footer uses the concept easing'
+      );
       assert(!playing.overflow);
       if (playing.position === 'sticky')
         assert(playing.mainBottom < playing.headingTop, 'The covering section cleared the heading');

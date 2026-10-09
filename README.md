@@ -462,7 +462,8 @@ The heading starts when the preceding main section's bottom passes 35% of the
 viewport, or 12px above the heading if that requires more uncovering. It matches
 the concept: 44px rise, 9px blur, 1.8s per character, 0.06s stagger and
 `power4.out`. Supporting text and links remain native. The divider draws once
-from its centre over 1.8s, with a 0.3s delay in the footer's Webflow embed.
+from its centre over 1.8s, with a 0.3s delay in the footer's Webflow embed. Its
+sticky reveal joins the heading only after asynchronous text preparation finishes.
 
 The same embed supplies a JS readiness flag and a preparation mask that releases
 to `clip-path: none` for playback. It uses normal flow for reduced motion or a
@@ -476,7 +477,8 @@ frames, the 0.3s delay, once-only behavior, short-screen flow, focus, resize,
 reduced motion and missing-script/style fallbacks. For local overrides, set
 `FOOTER_BEFORE_EMBED_PATH` and `FOOTER_EMBED_PATH` to temporary exports outside this
 repository. `FOOTER_LIVE=1 FOOTER_QUICK=1` verifies the published desktop/mobile
-pages without overrides. `FOOTER_EVIDENCE_DIR` sets the evidence directory.
+pages without overrides. `FOOTER_DELAY_TEXT=1` adds 700ms of text preparation
+latency to exercise the shared clock. `FOOTER_EVIDENCE_DIR` sets the evidence directory.
 
 ### Switching tabs
 
