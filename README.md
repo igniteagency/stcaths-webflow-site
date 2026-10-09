@@ -451,6 +451,33 @@ unpublished styles. `STATISTICS_EVIDENCE_DIR` selects output; `STATISTICS_WIDTH`
 limits the run to one width. Browser paths use `PLAYWRIGHT_MODULE` and
 `PLAYWRIGHT_CHROMIUM_EXECUTABLE`. The runner does not edit or publish Webflow.
 
+### Footer reveal
+
+`Section / Footer` owns `data-footer-reveal=""`, `data-text-trigger="manual"` and
+`data-divider-trigger="manual"` on its root. The manual hooks keep the generic
+text and divider observers from playing through the main content covering the
+sticky footer. `global.js` loads `components/footer.js` after the text factory.
+
+The heading starts when the preceding main section's bottom passes 35% of the
+viewport, or 12px above the heading if that requires more uncovering. It matches
+the concept: 44px rise, 9px blur, 1.8s per character, 0.06s stagger and
+`power4.out`. Supporting text and links remain native. The divider draws once
+from its centre over 1.8s, with a 0.3s delay in the footer's Webflow embed.
+
+The same embed supplies a JS readiness flag and a preparation mask that releases
+to `clip-path: none` for playback. It uses normal flow for reduced motion or a
+footer taller than the viewport; tall layouts trigger the heading and rule at
+85% of the viewport independently, allowing room for the title to be read. Resize,
+keyboard focus and motion-preference changes settle prepared motion immediately.
+All hiding is progressive: missing scripts or the embed leave content readable.
+
+`bun run qa:footer` checks Home and Senior School at four viewports, intermediate
+frames, the 0.3s delay, once-only behavior, short-screen flow, focus, resize,
+reduced motion and missing-script/style fallbacks. For local overrides, set
+`FOOTER_BEFORE_EMBED_PATH` and `FOOTER_EMBED_PATH` to temporary exports outside this
+repository. `FOOTER_LIVE=1 FOOTER_QUICK=1` verifies the published desktop/mobile
+pages without overrides. `FOOTER_EVIDENCE_DIR` sets the evidence directory.
+
 ### Switching tabs
 
 `Section / Switching Tabs` nests each panel `details` so they are not direct siblings. `details.ts` therefore cannot exclusive-group them. `global.js` loads `components/switching-tabs.js` when the component is on the page.

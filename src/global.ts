@@ -57,6 +57,10 @@ function UIFunctions() {
       .loadScript('components/text-reveal.js')
       .then(() => window.conditionalLoadScript('[data-hero-intro]', 'components/hero-intro.js'))
       .then(() => window.conditionalLoadScript('[data-menu-motion]', 'components/nav-menu.js'))
+      .then(() => {
+        if (document.querySelector('[data-footer-reveal]'))
+          return window.loadScript('components/footer.js');
+      })
       .catch((error) => console.error('Text motion unavailable:', error));
   }
   window.conditionalLoadScript(

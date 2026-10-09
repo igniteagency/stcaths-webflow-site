@@ -278,7 +278,7 @@ function createTextReveal(): TextRevealAPI {
             filter: 'blur(0px)',
             duration: settings.duration,
             delay: settings.delay,
-            ease: settings.ease,
+            ease: options.ease ?? settings.ease,
             stagger: { each: settings.stagger, from: settings.from },
             paused: options.paused ?? !automatic,
             immediateRender: true,

@@ -28,6 +28,7 @@ if (!reduced.matches && typeof IntersectionObserver === 'function') {
   }
 
   document.querySelectorAll(selector).forEach((rule) => {
+    if (rule.closest('[data-divider-trigger="manual"]')) return;
     if (getComputedStyle(rule).getPropertyValue('--divider-motion').trim() !== '1') return;
     const target = rule.closest('[data-pathways-rule="row"]')
       ? rule

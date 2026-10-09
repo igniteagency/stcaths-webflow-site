@@ -18,7 +18,8 @@
     "qa:nav-menu": "node ./bin/qa-nav-menu.mjs",
     "qa:hero-intro": "node ./bin/qa-hero-intro.mjs",
     "qa:statistics": "node ./bin/qa-statistics.mjs",
-    "qa:divider": "node ./bin/qa-divider.mjs"
+    "qa:divider": "node ./bin/qa-divider.mjs",
+    "qa:footer": "node ./bin/qa-footer.mjs"
   },
   "devDependencies": {
     "@finsweet/eslint-config": "^3.0.3",

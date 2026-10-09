@@ -38,7 +38,7 @@ declare global {
       | 'scale',
       number
     >
-  > & { preset?: TextRevealPreset; paused?: boolean };
+  > & { preset?: TextRevealPreset; paused?: boolean; ease?: string };
   interface TextRevealHandle {
     animation: ReturnType<typeof GSAP.fromTo>;
     play(): void;
