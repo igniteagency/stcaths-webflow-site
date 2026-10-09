@@ -87,11 +87,56 @@ try {
         .waitFor({ state: 'attached', timeout: 3000 });
       await restored();
     };
+    const panelTraces = [];
+    const transition = async (control, section) => {
+      await page.evaluate((section) => {
+        const list = document.querySelector('[data-el="nav-group-list"]');
+        const start = performance.now();
+        window.menuPanelTrace = { section, frames: [] };
+        function sample(now) {
+          const selected =
+            list.querySelector('details[open]')?.getAttribute('data-menu-section') ?? null;
+          if (selected === section) {
+            const label = list.querySelector(
+              section === null
+                ? 'details > summary [data-menu-label]'
+                : 'details[open] a [data-menu-label]'
+            );
+            const split = label.hasAttribute('data-split');
+            window.menuPanelTrace.frames.push({
+              at: now - start,
+              split,
+              visible: label.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }),
+              clip: getComputedStyle(list).clipPath,
+            });
+            if (split) return;
+          }
+          if (now - start < 4000) requestAnimationFrame(sample);
+        }
+        requestAnimationFrame(sample);
+      }, section);
+      await control.click();
+      await revealed(section === null ? 'details:not([open]) > summary' : 'details[open]');
+      const trace = await page.evaluate(() => window.menuPanelTrace);
+      panelTraces.push(trace);
+      assert(
+        trace.frames.some((frame) => frame.split),
+        'Incoming words actually animate'
+      );
+      assert.deepEqual(
+        trace.frames.filter(
+          (frame) => !frame.split && frame.visible && frame.clip !== 'inset(0px 0px 100%)'
+        ),
+        [],
+        'Incoming text must not flash fully visible before its reveal is prepared'
+      );
+    };
     const state = () =>
       menu.evaluate((el) => ({
         open: el.matches(':popover-open'),
         display: getComputedStyle(el).display,
         clip: getComputedStyle(el).clipPath,
+        panelClip: getComputedStyle(el.querySelector('[data-el="nav-group-list"]')).clipPath,
         splits: el.querySelectorAll('[data-split]').length,
         selected: el.querySelector('details[open]')?.getAttribute('data-menu-section') ?? null,
         overflow: document.documentElement.scrollWidth > innerWidth,
@@ -108,6 +153,7 @@ try {
     await page.screenshot({ path: `${EVIDENCE}/${width}-opening.png` });
     await page.waitForTimeout(1500);
     assert.equal((await state()).splits, 0, 'Finished opening restores original labels');
+    assert.equal((await state()).panelClip, 'none', 'Finished reveal removes preparation masking');
     const names = await summary.innerText();
     assert(names.includes('Why St Catherine'));
     await page.screenshot({ path: `${EVIDENCE}/${width}-open.png` });
@@ -123,18 +169,15 @@ try {
     await page.waitForTimeout(1000);
     assert.equal((await state()).splits, 0);
     await page.screenshot({ path: `${EVIDENCE}/${width}-submenu.png` });
-    await summary.click();
-    await revealed('details:not([open]) > summary');
+    await transition(summary, null);
     assert.equal((await state()).selected, null);
     for (let index = 1; index < 5; index++) {
       const control = menu.locator('details > summary').nth(index);
-      await control.click();
-      await revealed('details[open]');
+      await transition(control, String(index));
       assert.equal((await state()).selected, String(index));
       const overview = menu.locator('details[open] a').first();
       assert.equal(await overview.innerText(), 'Overview');
-      await control.click();
-      await revealed('details:not([open]) > summary');
+      await transition(control, null);
       assert.equal((await state()).selected, null);
     }
     await summary.focus();
@@ -177,6 +220,7 @@ try {
     await page.setViewportSize({ width: width + 2, height: 960 });
     await page.evaluate(() => window.menuResizeObserved);
     assert.equal((await state()).splits, 0, 'Resize restores readable labels');
+    assert.equal((await state()).panelClip, 'none', 'Resize restores a visible panel');
     await summary.click();
     await page.waitForTimeout(80);
     await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -189,6 +233,7 @@ try {
     );
     assert.equal((await state()).selected, '0', 'Reduced motion settles the requested panel');
     assert.equal((await state()).splits, 0);
+    assert.equal((await state()).panelClip, 'none', 'Reduced motion restores a visible panel');
     const href = await menu.locator('details[open] a').first().getAttribute('href');
     await page.route(new URL(href, SITE).href, (route) =>
       route.fulfill({ body: '<h1>Navigation succeeded</h1>', contentType: 'text/html' })
@@ -197,7 +242,7 @@ try {
     await page.waitForURL(new URL(href, SITE).href);
     assert.equal(await page.locator('h1').innerText(), 'Navigation succeeded');
     assert.deepEqual(errors, [], 'No page errors during the menu lifecycle');
-    results.push({ width, opening, submenu, closing, errors });
+    results.push({ width, opening, submenu, closing, panelTraces, errors });
     await page.close();
   }
   await writeFile(
