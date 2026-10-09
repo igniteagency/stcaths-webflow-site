@@ -87,6 +87,7 @@ document.querySelectorAll('[data-portrait-scroll]').forEach((section) => {
     moments.forEach((moment) => {
       moment.removeAttribute('data-active');
       moment.removeAttribute('aria-hidden');
+      moment.style.removeProperty('--portrait-drift');
       moment.inert = false;
     });
   }
@@ -194,10 +195,13 @@ document.querySelectorAll('[data-portrait-scroll]').forEach((section) => {
         if (!track!.hasAttribute('data-portrait-ready')) return;
         const bounds = track!.getBoundingClientRect();
         const top = parseFloat(getComputedStyle(stage!).top) || 0;
-        const index = Math.min(
-          moments.length - 1,
-          Math.floor(Math.max(0, top - bounds.top) / (innerHeight * 0.8))
-        );
+        const position = Math.max(0, top - bounds.top) / (innerHeight * 0.8);
+        // The inner image drifts with scroll while its outer frame owns the timed slide.
+        moments.forEach((moment, i) => {
+          const progress = Math.max(0, Math.min(1, position - i));
+          moment.style.setProperty('--portrait-drift', `${5 - progress * 10}px`);
+        });
+        const index = Math.min(moments.length - 1, Math.floor(position));
         show(index, immediate || bounds.bottom < 0 || bounds.top > innerHeight);
       }
       sync = () => update();

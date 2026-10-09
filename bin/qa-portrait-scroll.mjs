@@ -80,6 +80,7 @@ async function state(page) {
       opacity: +getComputedStyle(p.querySelector('.portrait-scroll_heading')).opacity,
       split: p.querySelectorAll('[data-split]').length,
       image: getComputedStyle(p.querySelector('.portrait-scroll_visual > *')).transform,
+      drift: getComputedStyle(p.querySelector('.portrait-scroll_visual .image')).translate,
     })),
   }));
 }
@@ -127,6 +128,35 @@ async function partial(page, index) {
     }, index)
   ).jsonValue();
 }
+async function drift(page, position) {
+  await scroll(page, position);
+  await page.waitForFunction((position) => {
+    const p = document.querySelector('[data-portrait-scroll] [data-active]');
+    const translation = parseFloat(
+      getComputedStyle(p.querySelector('.portrait-scroll_visual .image')).translate
+    );
+    const expected = 5 - (position + 20 / (innerHeight * 0.8)) * 10;
+    return Math.abs(translation - expected) < 0.03;
+  }, position);
+  return page.locator('[data-portrait-scroll] [data-active]').evaluate((p) => {
+    const image = p.querySelector('.portrait-scroll_visual .image');
+    const crop = p.querySelector('.portrait-scroll_visual');
+    const style = getComputedStyle(image);
+    const imageBounds = image.getBoundingClientRect(),
+      cropBounds = crop.getBoundingClientRect();
+    return {
+      x: parseFloat(style.translate),
+      scale: parseFloat(style.scale),
+      outer: getComputedStyle(crop.firstElementChild).transform,
+      covered:
+        imageBounds.left <= cropBounds.left &&
+        imageBounds.right >= cropBounds.right &&
+        imageBounds.top <= cropBounds.top &&
+        imageBounds.bottom >= cropBounds.bottom,
+      split: !!p.querySelector('[data-split]'),
+    };
+  });
+}
 try {
   for (const width of [1440, 992, 820, 667, 390]) {
     const { page, errors } = await open(width);
@@ -140,6 +170,16 @@ try {
       const entrance = await partial(page, 0);
       assert.equal(entrance.mask, 'none');
       await settled(page, 0);
+      const driftStart = await drift(page, 0.1);
+      const driftForward = await drift(page, 0.7);
+      const driftBack = await drift(page, 0.2);
+      assert(driftForward.x < driftStart.x && driftBack.x > driftForward.x);
+      for (const frame of [driftStart, driftForward, driftBack]) {
+        assert.equal(frame.scale, 1.04);
+        assert.equal(frame.outer, 'none');
+        assert(frame.covered && !frame.split, 'Only the image drifts during the reading interval');
+      }
+      await page.screenshot({ path: `${OUT}/${width}-drift.png` });
       await scroll(page, 1);
       const exit = await page.waitForFunction(() => {
         const p = document.querySelector('[data-portrait-scroll] [data-leaving]');
@@ -188,7 +228,11 @@ try {
           !document.querySelector('.portrait-scroll_component').hasAttribute('data-portrait-ready')
       );
       const reduced = await state(page);
-      assert(reduced.panels.every((p) => !p.inert && p.hidden === null && p.split === 0));
+      assert(
+        reduced.panels.every(
+          (p) => !p.inert && p.hidden === null && p.split === 0 && p.drift === 'none'
+        )
+      );
       await page.emulateMedia({ reducedMotion: 'no-preference' });
       await page.waitForFunction(() =>
         document.querySelector('.portrait-scroll_component').hasAttribute('data-portrait-ready')
@@ -209,10 +253,24 @@ try {
           (p) => !p.inert && p.hidden === null && p.visibility === 'visible' && p.mask === 'none'
         )
       );
-      results.push({ width, initial, entrance, transition, reverse, end, resized, errors });
+      assert(resized.panels.every((p) => p.drift === 'none'));
+      results.push({
+        width,
+        initial,
+        entrance,
+        driftStart,
+        driftForward,
+        driftBack,
+        transition,
+        reverse,
+        end,
+        resized,
+        errors,
+      });
     } else {
       assert(!initial.ready);
       assert(initial.panels.every((p) => !p.inert && p.visibility === 'visible'));
+      assert(initial.panels.every((p) => p.drift === 'none'));
       await page
         .locator('.portrait-scroll_heading')
         .first()
