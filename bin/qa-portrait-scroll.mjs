@@ -72,6 +72,7 @@ async function state(page) {
     panels: [...section.querySelectorAll('[data-portrait-moment]')].map((p) => ({
       active: p.hasAttribute('data-active'),
       leaving: p.hasAttribute('data-leaving'),
+      preview: p.hasAttribute('data-portrait-preview'),
       inert: p.inert,
       hidden: p.getAttribute('aria-hidden'),
       state: p.dataset.portraitTextState,
@@ -80,7 +81,8 @@ async function state(page) {
       opacity: +getComputedStyle(p.querySelector('.portrait-scroll_heading')).opacity,
       split: p.querySelectorAll('[data-split]').length,
       image: getComputedStyle(p.querySelector('.portrait-scroll_visual > *')).transform,
-      drift: getComputedStyle(p.querySelector('.portrait-scroll_visual .image')).translate,
+      innerTranslate: getComputedStyle(p.querySelector('.portrait-scroll_visual .image')).translate,
+      innerScale: getComputedStyle(p.querySelector('.portrait-scroll_visual .image')).scale,
     })),
   }));
 }
@@ -128,34 +130,59 @@ async function partial(page, index) {
     }, index)
   ).jsonValue();
 }
-async function drift(page, position) {
+async function preview(page, position, index, side) {
   await scroll(page, position);
-  await page.waitForFunction((position) => {
-    const p = document.querySelector('[data-portrait-scroll] [data-active]');
-    const translation = parseFloat(
-      getComputedStyle(p.querySelector('.portrait-scroll_visual .image')).translate
-    );
-    const expected = 5 - (position + 20 / (innerHeight * 0.8)) * 10;
-    return Math.abs(translation - expected) < 0.03;
-  }, position);
-  return page.locator('[data-portrait-scroll] [data-active]').evaluate((p) => {
-    const image = p.querySelector('.portrait-scroll_visual .image');
-    const crop = p.querySelector('.portrait-scroll_visual');
-    const style = getComputedStyle(image);
-    const imageBounds = image.getBoundingClientRect(),
-      cropBounds = crop.getBoundingClientRect();
-    return {
-      x: parseFloat(style.translate),
-      scale: parseFloat(style.scale),
-      outer: getComputedStyle(crop.firstElementChild).transform,
-      covered:
-        imageBounds.left <= cropBounds.left &&
-        imageBounds.right >= cropBounds.right &&
-        imageBounds.top <= cropBounds.top &&
-        imageBounds.bottom >= cropBounds.bottom,
-      split: !!p.querySelector('[data-split]'),
-    };
-  });
+  const snapshot = await page.waitForFunction(
+    ({ index, side, position }) => {
+      const panels = [
+        ...document.querySelectorAll('[data-portrait-scroll] [data-portrait-moment]'),
+      ];
+      const p = panels[index],
+        active = panels.find((p) => p.hasAttribute('data-active'));
+      const crop = p.querySelector('.portrait-scroll_visual'),
+        image = crop.firstElementChild;
+      if (
+        !p.hasAttribute('data-portrait-preview') ||
+        window.gsap.isTweening(image) ||
+        document.querySelectorAll('[data-portrait-preview]').length !== 1
+      )
+        return false;
+      const a = image.getBoundingClientRect(),
+        b = crop.getBoundingClientRect();
+      const amount = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+      const x = new DOMMatrixReadOnly(getComputedStyle(image).transform).m41;
+      const progress = position - panels.indexOf(active) + 20 / (innerHeight * 0.8);
+      const expected =
+        Math.max(0, Math.min(1, side === 'right' ? progress : 1 - progress)) *
+        Math.min(18, image.clientWidth * 0.06);
+      if (Math.abs(amount - expected) > 0.1) return false;
+      if (amount < 1 || (side === 'right' ? x <= 0 : x >= 0)) return false;
+      return {
+        amount,
+        x,
+        inert: p.inert,
+        aria: p.getAttribute('aria-hidden'),
+        headingVisibility: getComputedStyle(p.querySelector('h2')).visibility,
+        imageVisibility: getComputedStyle(image).visibility,
+        above: +getComputedStyle(p).zIndex > +getComputedStyle(active).zIndex,
+        activeImage: getComputedStyle(active.querySelector('.portrait-scroll_visual > *'))
+          .transform,
+        innerTranslate: getComputedStyle(active.querySelector('.image')).translate,
+        innerScale: getComputedStyle(active.querySelector('.image')).scale,
+        split: !!active.querySelector('[data-split]'),
+      };
+    },
+    { index, side, position }
+  );
+  const frame = await snapshot.jsonValue();
+  assert(frame.amount <= 18.1 && frame.above && frame.inert && frame.aria === 'true');
+  assert.equal(frame.headingVisibility, 'hidden');
+  assert.equal(frame.imageVisibility, 'visible');
+  assert.equal(frame.activeImage, 'none');
+  assert.equal(frame.innerTranslate, 'none');
+  assert.equal(frame.innerScale, 'none');
+  assert(!frame.split);
+  return frame;
 }
 try {
   for (const width of [1440, 992, 820, 667, 390]) {
@@ -170,32 +197,44 @@ try {
       const entrance = await partial(page, 0);
       assert.equal(entrance.mask, 'none');
       await settled(page, 0);
-      const driftStart = await drift(page, 0.1);
-      const driftForward = await drift(page, 0.7);
-      const driftBack = await drift(page, 0.2);
-      assert(driftForward.x < driftStart.x && driftBack.x > driftForward.x);
-      for (const frame of [driftStart, driftForward, driftBack]) {
-        assert.equal(frame.scale, 1.04);
-        assert.equal(frame.outer, 'none');
-        assert(frame.covered && !frame.split, 'Only the image drifts during the reading interval');
-      }
-      await page.screenshot({ path: `${OUT}/${width}-drift.png` });
+      const previewStart = await preview(page, 0.1, 1, 'right');
+      const previewForward = await preview(page, 0.9, 1, 'right');
+      assert(previewForward.amount > previewStart.amount);
+      await page.screenshot({ path: `${OUT}/${width}-preview-right.png` });
       await scroll(page, 1);
       const exit = await page.waitForFunction(() => {
         const p = document.querySelector('[data-portrait-scroll] [data-leaving]');
         if (!p) return false;
         const opacity = +getComputedStyle(p.querySelector('.portrait-scroll_heading')).opacity;
         return opacity > 0 && opacity < 1
-          ? { opacity, inert: p.inert, state: p.dataset.portraitTextState }
+          ? {
+              opacity,
+              inert: p.inert,
+              state: p.dataset.portraitTextState,
+              incomingX: new DOMMatrixReadOnly(
+                getComputedStyle(
+                  document.querySelector(
+                    '[data-portrait-scroll] [data-active] .portrait-scroll_visual > *'
+                  )
+                ).transform
+              ).m41,
+            }
           : false;
       });
       assert((await exit.jsonValue()).inert);
+      assert(
+        Math.abs((await exit.jsonValue()).incomingX - previewForward.x) < 1,
+        'Overlay continues from its preview without jumping back to the edge'
+      );
       const transition = await partial(page, 1);
       assert.equal(transition.mask, 'none');
       assert.equal(transition.heading, 'Character');
       await page.screenshot({ path: `${OUT}/${width}-transition.png` });
       await settled(page, 1);
-      await scroll(page, 0);
+      await preview(page, 1.8, 2, 'right');
+      const previewBack = await preview(page, 1.05, 0, 'left');
+      await page.screenshot({ path: `${OUT}/${width}-preview-left.png` });
+      await scroll(page, 0.95);
       const reverse = await partial(page, 0);
       assert.equal(reverse.mask, 'none');
       await settled(page, 0);
@@ -229,9 +268,7 @@ try {
       );
       const reduced = await state(page);
       assert(
-        reduced.panels.every(
-          (p) => !p.inert && p.hidden === null && p.split === 0 && p.drift === 'none'
-        )
+        reduced.panels.every((p) => !p.inert && p.hidden === null && p.split === 0 && !p.preview)
       );
       await page.emulateMedia({ reducedMotion: 'no-preference' });
       await page.waitForFunction(() =>
@@ -253,14 +290,18 @@ try {
           (p) => !p.inert && p.hidden === null && p.visibility === 'visible' && p.mask === 'none'
         )
       );
-      assert(resized.panels.every((p) => p.drift === 'none'));
+      assert(
+        resized.panels.every(
+          (p) => !p.preview && p.innerTranslate === 'none' && p.innerScale === 'none'
+        )
+      );
       results.push({
         width,
         initial,
         entrance,
-        driftStart,
-        driftForward,
-        driftBack,
+        previewStart,
+        previewForward,
+        previewBack,
         transition,
         reverse,
         end,
@@ -270,7 +311,11 @@ try {
     } else {
       assert(!initial.ready);
       assert(initial.panels.every((p) => !p.inert && p.visibility === 'visible'));
-      assert(initial.panels.every((p) => p.drift === 'none'));
+      assert(
+        initial.panels.every(
+          (p) => !p.preview && p.innerTranslate === 'none' && p.innerScale === 'none'
+        )
+      );
       await page
         .locator('.portrait-scroll_heading')
         .first()
