@@ -33,6 +33,19 @@ async function open(width, mode = 'normal', height = 979) {
   current = page;
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
+  await page.addInitScript(() => {
+    document.addEventListener(
+      'load',
+      (event) => {
+        if (
+          event.target instanceof HTMLScriptElement &&
+          event.target.src.includes('components/portrait-scroll.js')
+        )
+          window.portraitScriptLoaded = true;
+      },
+      true
+    );
+  });
   if (!LIVE) {
     await page.route('**/gh/igniteagency/stcaths-webflow-site/**', async (route) => {
       const file = new URL(route.request().url()).pathname.split('/dist/prod/')[1];
@@ -58,11 +71,7 @@ async function open(width, mode = 'normal', height = 979) {
   await page.goto(SITE, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.stCathsTextReveal);
   await page.evaluate(() => document.fonts.ready);
-  if (!['blocked-js', 'no-css'].includes(mode))
-    await page.waitForFunction(() =>
-      [...document.scripts].some((s) => s.src.includes('components/portrait-scroll.js'))
-    );
-  await page.waitForTimeout(600);
+  if (mode !== 'blocked-js') await page.waitForFunction(() => window.portraitScriptLoaded);
   return { page, errors };
 }
 async function state(page) {
