@@ -1,0 +1,3 @@
+Hershey fonts by Dr. A. V. Hershey, U.S. National Bureau of Standards; JHF format by James Hurt, Cognition, Inc. — free use with these acknowledgements
+
+Letterpaths © 2026 Robin Linacre, MIT (https://github.com/RobinL/letterpaths)

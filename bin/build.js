@@ -10,6 +10,7 @@ const production = process.env.NODE_ENV === 'production';
 const productionTarget = browserslistToEsbuild('defaults');
 
 const BUILD_DIRECTORY = !production ? DEV_BUILD_PATH : PROD_BUILD_PATH;
+const HANDWRITING_ENTRY = './src/components/handwritten-note.ts';
 
 const ENTRY_PATTERNS = [
   './src/entry.ts',
@@ -35,7 +36,7 @@ const files = (
 ).flat();
 
 const buildSettings = {
-  entryPoints: files,
+  entryPoints: files.filter((file) => path.resolve(file) !== path.resolve(HANDWRITING_ENTRY)),
   bundle: true,
   outdir: BUILD_DIRECTORY,
   minify: !production ? false : true,
@@ -65,7 +66,27 @@ try {
   // Clean the build directory before starting the build
   deleteDirectoryContents(BUILD_DIRECTORY);
 
+  fs.cpSync('./src/assets/handwriting', path.join(BUILD_DIRECTORY, 'assets/handwriting'), {
+    recursive: true,
+  });
+  fs.mkdirSync(path.join(BUILD_DIRECTORY, 'components'), { recursive: true });
+  fs.copyFileSync(
+    './node_modules/harfbuzzjs/dist/harfbuzz.wasm',
+    path.join(BUILD_DIRECTORY, 'components/harfbuzz.wasm')
+  );
+  const handwritingSettings = {
+    ...buildSettings,
+    entryPoints: [HANDWRITING_ENTRY],
+    outdir: path.join(BUILD_DIRECTORY, 'components'),
+    format: 'esm',
+    // HarfBuzz initializes its WASM with top-level await and import.meta.url.
+    external: ['module', 'fs', 'path', 'url'],
+  };
+
   if (!production) {
+    const handwriting = await esbuild.context(handwritingSettings);
+    await handwriting.watch();
+    await handwriting.rebuild();
     let ctx = await esbuild.context(buildSettings);
 
     let { port } = await ctx.serve({
@@ -78,7 +99,7 @@ try {
 
     console.log(`Serving at http://localhost:${port}`);
   } else {
-    await esbuild.build(buildSettings);
+    await Promise.all([esbuild.build(buildSettings), esbuild.build(handwritingSettings)]);
   }
 } catch (error) {
   console.error(error);

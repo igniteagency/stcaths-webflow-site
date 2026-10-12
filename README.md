@@ -633,3 +633,32 @@ For the uncommon case where direct sibling disclosures must remain independently
 - To manually purge a tagged version's files, wait for 10 minutes after the new release tag is added [[info discussion link](https://github.com/jsdelivr/jsdelivr/issues/18376#issuecomment-1047040896)]
 
 [**JSDelivr CDN Purge URL**](https://www.jsdelivr.com/tools/purge)
+
+### Handwritten note
+
+`Section / Handwritten Note` in Webflow owns the editable Note, Name, Role and Seal
+properties. Its native paragraph is the source of both the visible handwriting and
+the accessible text. Copy edits use the existing Homemade Apple glyph data; they
+do not require regenerating a font or rebuilding this repository.
+
+The section uses `data-handwritten-note=""` and `data-text-reveal="off"`. Its stage,
+letter composition and source paragraph use `data-handwritten-note-stage=""`,
+`data-handwritten-note-paper=""` and `data-handwritten-note-text=""` respectively.
+Keep the section's `component-style` embed with it: the module only starts when
+that CSS supplies `--handwritten-note-motion: 1`.
+
+`global.ts` conditionally loads `components/handwritten-note.js` as an ES module.
+The build copies the font, licensed stroke data and HarfBuzz WASM alongside the
+production scripts. Normal layout and responsive styles remain native Webflow
+styles; the section embed owns paper pseudo-elements and animation state CSS.
+
+The approved scroll tuning uses a 320svh section, a 100svh sticky stage, 1.2 stage
+heights of writing distance, a 0.42s catch-up curve and a maximum progress rate of
+0.42 per second. Fast flings pause actual ink offscreen instead of snapping to
+completion. Reduced motion, viewports shorter than 500px, unsupported characters
+and loading failures retain the complete native text without pinning.
+
+Run `node --test tests/handwriting-progress.test.mjs` for scroll-regression checks.
+`bun run qa:handwriting` accepts temporary Webflow exports outside this repository
+via `HANDWRITING_EMBED_PATH`, `HANDWRITING_MARKUP_PATH` and
+`HANDWRITING_ASSETS_DIR`; it does not maintain a second copy of component CSS.

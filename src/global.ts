@@ -36,6 +36,11 @@ function initComponents() {
 function UIFunctions() {
   duplicateMarqueeList();
   initDetailsGroups();
+  if (document.querySelector('[data-handwritten-note]')) {
+    void window
+      .loadScript('components/handwritten-note.js', { isModule: true })
+      .catch((error) => console.error('Handwritten note unavailable:', error));
+  }
   if (document.querySelector('[data-hero-intro]')) {
     document
       .querySelector('[data-hero-intro-content]')

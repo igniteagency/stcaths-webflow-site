@@ -77,6 +77,10 @@ declare global {
     ScrollTrigger: typeof ScrollTrigger;
     stCathsTextReveal?: TextRevealAPI;
     stCathsButtonText?: ButtonTextAPI;
+    stCathsHandwriting?: {
+      init(root?: ParentNode): void;
+      dispose(root?: ParentNode): void;
+    };
     Webflow: Webflow;
     WF_IX: Webflow_IX3;
 

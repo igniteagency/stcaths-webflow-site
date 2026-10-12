@@ -1,0 +1,22 @@
+{
+  "generator": "https://github.com/gkurt/tegaki",
+  "commit": "3c25f2b0c14970a21c9685e5fdce4311c80dda56",
+  "fontSource": "User-supplied HomemadeApple-Regular.ttf, version 1.001",
+  "originalFontSha256": "0cce5c499541817f129b7a1078ffb89d426c1e09335e07e9b304bb34193e8eee",
+  "pipeline": "geometry",
+  "referenceDatasets": [
+    "hershey-script",
+    "hershey-simplex",
+    "letterpaths-print",
+    "letterpaths-cursive",
+    "punctuation"
+  ],
+  "stats": {
+    "processed": 227,
+    "skipped": 0,
+    "variants": 0
+  },
+  "characters": "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿıŁłŒœŠšŸŽžˆˇ˘˙˚˛˜˝–—‘’‚“”„•…‰‹›⁄€™−ﬁﬂ",
+  "strokeSourceFontSha256": "dd1baaca3cde1b1f8415aed3b0aea6808655c9d9ca5a99c7282d9accc16c1a58",
+  "validation": "All 230 glyph outlines, advances and all 229 Unicode-to-glyph mappings are identical to the original stroke source; only metadata, hinting/encoding tables differ."
+}

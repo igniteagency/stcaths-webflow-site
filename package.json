@@ -21,7 +21,8 @@
     "qa:divider": "node ./bin/qa-divider.mjs",
     "qa:footer": "node ./bin/qa-footer.mjs",
     "qa:nav-wordmark": "node ./bin/qa-nav-wordmark.mjs",
-    "qa:portrait-scroll": "node ./bin/qa-portrait-scroll.mjs"
+    "qa:portrait-scroll": "node ./bin/qa-portrait-scroll.mjs",
+    "qa:handwriting": "node ./bin/qa-handwritten-note.mjs"
   },
   "devDependencies": {
     "@finsweet/eslint-config": "^3.0.3",
@@ -45,6 +46,8 @@
   },
   "dependencies": {
     "@finsweet/ts-utils": "^0.40.0",
-    "kugiri": "0.5.3"
+    "harfbuzzjs": "1.6.2",
+    "kugiri": "0.5.3",
+    "tegaki": "1.0.3"
   }
 }
