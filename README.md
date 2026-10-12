@@ -650,7 +650,7 @@ that CSS supplies `--handwritten-note-motion: 1`.
 `global.ts` conditionally loads `components/handwritten-note.js` as an ES module.
 The build copies the font, licensed stroke data and HarfBuzz WASM alongside the
 production scripts. Normal layout and responsive styles remain native Webflow
-styles; the section embed owns paper pseudo-elements and animation state CSS.
+styles, including the paper pseudo-elements; the section embed owns only animation\nstate and accessibility CSS.
 
 The approved scroll tuning uses a 320svh section, a 100svh sticky stage, 1.2 stage
 heights of writing distance, a 0.42s catch-up curve and a maximum progress rate of
