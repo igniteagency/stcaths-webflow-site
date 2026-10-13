@@ -216,7 +216,6 @@ function mountReveal(element: HTMLElement): (() => void) | undefined {
   if (
     media.matches ||
     !text ||
-    !window.gsap ||
     typeof IntersectionObserver !== 'function' ||
     getComputedStyle(element).getPropertyValue('--handwriting-reveal-motion').trim() !== '1'
   )
@@ -231,11 +230,9 @@ function mountReveal(element: HTMLElement): (() => void) | undefined {
   element.append(source, renderer);
   const cleanup = new AbortController();
   let engine: TegakiEngine | undefined;
-  let animation: ReturnType<typeof window.gsap.to> | undefined;
   let ready = false;
   let visible = false;
   let started = false;
-  const ink = { progress: 0 };
 
   function play() {
     if (!ready || !visible || started || cleanup.signal.aborted) return;
@@ -245,14 +242,8 @@ function mountReveal(element: HTMLElement): (() => void) | undefined {
     const requested = Number(element.getAttribute('data-handwriting-duration'));
     const duration =
       requested > 0 && Number.isFinite(requested) ? Math.min(10, Math.max(0.5, requested)) : 2;
-    animation = window.gsap.to(ink, {
-      progress: 1,
-      duration,
-      ease: 'none',
-      onUpdate: () =>
-        engine?.update({
-          time: { mode: 'controlled', unit: 'progress', value: ink.progress },
-        }),
+    engine?.update({
+      time: { mode: 'uncontrolled', initialTime: 0, playing: true, loop: false, duration },
       onComplete: () => {
         element.dataset.handwritingRevealState = 'complete';
       },
@@ -272,7 +263,6 @@ function mountReveal(element: HTMLElement): (() => void) | undefined {
     cleanup.abort();
     observer.disconnect();
     edits.disconnect();
-    animation?.kill();
     engine?.destroy();
     renderer.remove();
     source.replaceWith(...source.childNodes);
