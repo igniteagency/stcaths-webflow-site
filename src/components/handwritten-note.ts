@@ -3,7 +3,7 @@ import { createHarfbuzzShaper } from 'tegaki/shaper-harfbuzz';
 
 import { handwritingStep, handwritingTarget } from '$utils/handwriting-progress';
 
-const SELECTOR = '[data-handwritten-note]';
+const SELECTOR = '[data-handwritten-note], [data-handwriting-reveal]';
 const CAN_PIN = '(prefers-reduced-motion: no-preference) and (min-height: 500px)';
 const BUNDLE_URL = new URL('../assets/handwriting/homemade-apple/tegaki.json', import.meta.url);
 const instances = new Map<HTMLElement, () => void>();
@@ -209,13 +209,127 @@ function mount(section: HTMLElement): (() => void) | undefined {
   return dispose;
 }
 
+// A separate, time-based reveal: entering the viewport starts one complete write-on.
+function mountReveal(element: HTMLElement): (() => void) | undefined {
+  const media = matchMedia('(prefers-reduced-motion: reduce)');
+  const text = element.textContent?.normalize('NFC').trim() ?? '';
+  if (
+    media.matches ||
+    !text ||
+    !window.gsap ||
+    typeof IntersectionObserver !== 'function' ||
+    getComputedStyle(element).getPropertyValue('--handwriting-reveal-motion').trim() !== '1'
+  )
+    return;
+
+  const source = document.createElement('span');
+  source.setAttribute('data-handwriting-source', '');
+  source.append(...element.childNodes);
+  const renderer = document.createElement('span');
+  renderer.setAttribute('data-handwriting-renderer', '');
+  renderer.setAttribute('aria-hidden', 'true');
+  element.append(source, renderer);
+  const cleanup = new AbortController();
+  let engine: TegakiEngine | undefined;
+  let animation: ReturnType<typeof window.gsap.to> | undefined;
+  let ready = false;
+  let visible = false;
+  let started = false;
+  const ink = { progress: 0 };
+
+  function play() {
+    if (!ready || !visible || started || cleanup.signal.aborted) return;
+    started = true;
+    observer.disconnect();
+    element.dataset.handwritingRevealState = 'running';
+    const requested = Number(element.getAttribute('data-handwriting-duration'));
+    const duration =
+      requested > 0 && Number.isFinite(requested) ? Math.min(10, Math.max(0.5, requested)) : 2;
+    animation = window.gsap.to(ink, {
+      progress: 1,
+      duration,
+      ease: 'none',
+      onUpdate: () =>
+        engine?.update({
+          time: { mode: 'controlled', unit: 'progress', value: ink.progress },
+        }),
+      onComplete: () => {
+        element.dataset.handwritingRevealState = 'complete';
+      },
+    });
+  }
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      visible = entries.some((entry) => entry.isIntersecting && entry.intersectionRatio >= 0.3);
+      play();
+    },
+    { threshold: 0.3, rootMargin: '0px 0px -10% 0px' }
+  );
+  observer.observe(element);
+
+  function dispose() {
+    cleanup.abort();
+    observer.disconnect();
+    edits.disconnect();
+    animation?.kill();
+    engine?.destroy();
+    renderer.remove();
+    source.replaceWith(...source.childNodes);
+    delete element.dataset.handwritingRevealState;
+    instances.delete(element);
+  }
+
+  // Live copy changes fall back to the newly edited native text.
+  const edits = new MutationObserver(dispose);
+  edits.observe(source, { childList: true, characterData: true, subtree: true });
+  media.addEventListener('change', dispose, { signal: cleanup.signal });
+  element.dataset.handwritingRevealState = 'loading';
+  void prepareFont()
+    .then((bundle) => {
+      if (cleanup.signal.aborted) return;
+      if (
+        !element.isConnected ||
+        [...text].some((char) => !/\s/u.test(char) && !bundle.glyphData[char])
+      ) {
+        dispose();
+        return;
+      }
+      engine = new TegakiEngine(renderer, {
+        text,
+        font: bundle,
+        time: { mode: 'controlled', unit: 'progress', value: 0 },
+        reducedMotion: 'user',
+        pressure: 0,
+        quality: { clipText: 2, smoothing: true, segmentSize: 1 },
+        timing: { glyphGap: 0.025, wordGap: 0.12, lineGap: 0.2, strokeEasing: (t) => t },
+        onChangeTimeline: () => {
+          queueMicrotask(() => {
+            if (cleanup.signal.aborted || ready || !engine?.duration) return;
+            ready = true;
+            element.dataset.handwritingRevealState = 'waiting';
+            play();
+          });
+        },
+      });
+    })
+    .catch((error) => {
+      if (cleanup.signal.aborted) return;
+      dispose();
+      console.error('Handwriting reveal unavailable; showing the original text:', error);
+    });
+  return dispose;
+}
+
 window.stCathsHandwriting = {
   init(root: ParentNode = document) {
     const sections = [...root.querySelectorAll(SELECTOR)];
     if (root instanceof HTMLElement && root.matches(SELECTOR)) sections.unshift(root);
     for (const section of sections) {
       if (instances.has(section)) continue;
-      const dispose = mount(section);
+      const dispose = section.matches('[data-handwriting-reveal]')
+        ? mountReveal(section)
+        : mount(section);
       if (dispose) instances.set(section, dispose);
     }
   },

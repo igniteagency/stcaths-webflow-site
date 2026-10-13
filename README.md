@@ -666,3 +666,22 @@ Run `node --test tests/handwriting-progress.test.mjs` for scroll-regression chec
 `bun run qa:handwriting` accepts temporary Webflow exports outside this repository
 via `HANDWRITING_EMBED_PATH`, `HANDWRITING_MARKUP_PATH` and
 `HANDWRITING_ASSETS_DIR`; it does not maintain a second copy of component CSS.
+
+### Testimonial name handwriting
+
+The native `testimonial_name` paragraph in Webflow's shared `Section / Testimonial`
+uses `data-handwriting-reveal=""` and `data-text-reveal="off"`. The existing component
+style embed owns `--handwriting-reveal-motion: 1`, renderer positioning and the
+source/renderer visibility states. No authored copy or component properties change.
+
+The same handwriting ES module and Homemade Apple assets serve both this reveal
+and the principal note. An IntersectionObserver starts the name once when 30%
+is visible within the viewport's upper 90%. Writing runs for 2 seconds, independent
+of scroll speed, and stays complete on re-entry. An optional
+`data-handwriting-duration="2"` on the name sets seconds (clamped to 0.5–10).
+The note's existing scroll behavior is unchanged.
+
+The original editable text stays in the accessibility tree and preserves layout.
+Reduced motion, missing component CSS, unsupported glyphs or asset failures leave
+native text visible. The renderer is decorative. Runtime source/renderer spans
+are removed on disposal; editing text at runtime restores the native text.
