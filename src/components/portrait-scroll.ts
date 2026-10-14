@@ -2,6 +2,7 @@ export {};
 
 const DESKTOP =
   '(min-width: 992px) and (min-height: 621px) and (prefers-reduced-motion: no-preference)';
+const SCROLL_ZOOM = 0.04;
 const COPY = '.portrait-scroll_heading,.portrait-scroll_copy';
 const TEXT =
   '.portrait-scroll_heading :is(h1,h2,h3,h4,h5,h6),.portrait-scroll_copy p:not(.button_text)';
@@ -11,6 +12,7 @@ document.querySelectorAll('[data-portrait-scroll]').forEach((section) => {
   const stage = section.querySelector('.portrait-scroll_stage');
   const moments = Array.from(section.querySelectorAll('[data-portrait-moment]'));
   const images = moments.map((moment) => moment.querySelector('.portrait-scroll_visual > *'));
+  const photos = moments.map((moment) => moment.querySelector('.portrait-scroll_visual img'));
   const text = window.stCathsTextReveal!;
   const gsap = window.gsap;
   if (
@@ -18,6 +20,7 @@ document.querySelectorAll('[data-portrait-scroll]').forEach((section) => {
     !stage ||
     !moments.length ||
     images.some((image) => !image) ||
+    photos.some((photo) => !photo) ||
     !text ||
     !gsap ||
     !window.ScrollTrigger ||
@@ -35,9 +38,7 @@ document.querySelectorAll('[data-portrait-scroll]').forEach((section) => {
   let requested = 0;
   let generation = 0;
   let playing = false;
-  let preview = -1;
   let position = 0;
-  let direction = 1;
   let timeline: ReturnType<typeof gsap.timeline> | undefined;
   let sync = () => {};
 
@@ -75,9 +76,10 @@ document.querySelectorAll('[data-portrait-scroll]').forEach((section) => {
     timeline?.kill();
     timeline = undefined;
     playing = false;
-    clearPreview();
+    gsap.killTweensOf(photos);
     text.dispose(section);
-    gsap.set(images, { clearProps: 'transform' });
+    gsap.set(images, { clearProps: 'transform,opacity' });
+    gsap.set(photos, { clearProps: 'transform' });
     gsap.set(copies, { clearProps: 'opacity' });
     moments.forEach((moment) => {
       moment.removeAttribute('data-leaving');
@@ -136,41 +138,12 @@ document.querySelectorAll('[data-portrait-scroll]').forEach((section) => {
     console.error('Portrait panel motion skipped:', error);
   }
 
-  function clearPreview() {
-    gsap.killTweensOf(images);
-    moments.forEach((moment) => moment.removeAttribute('data-portrait-preview'));
-    preview = -1;
-  }
-  function previewImage(index: number, progress: number) {
-    const next = index >= 0 && index < moments.length && visible(stage!) ? index : -1;
-    if (next !== preview) {
-      const previous = preview;
-      preview = next;
-      if (previous >= 0) {
-        gsap.to(images[previous], {
-          xPercent: Math.sign(Number(gsap.getProperty(images[previous]!, 'xPercent'))) * 100,
-          duration: 0.18,
-          ease: 'power2.out',
-          overwrite: true,
-          onComplete: () => moments[previous].removeAttribute('data-portrait-preview'),
-        });
-      }
-      if (next >= 0) {
-        gsap.killTweensOf(images[next]);
-        if (!moments[next].hasAttribute('data-portrait-preview'))
-          gsap.set(images[next], { xPercent: direction * 100 });
-        moments[next].setAttribute('data-portrait-preview', '');
-      }
-    }
-    if (next < 0) return;
-    const width = images[next]!.clientWidth;
-    if (!width) return;
-    const amount = Math.max(0, Math.min(1, progress)) * Math.min(18, width * 0.06);
-    gsap.to(images[next], {
-      xPercent: direction * (100 - (amount / width) * 100),
-      duration: 0.18,
-      ease: 'power2.out',
-      overwrite: true,
+  function zoomPhotos(immediate = false) {
+    photos.forEach((photo, index) => {
+      const progress = Math.max(0, Math.min(1, position - index));
+      const scale = 1.02 + SCROLL_ZOOM * progress;
+      if (immediate) gsap.set(photo, { scale });
+      else gsap.to(photo, { scale, duration: 0.16, ease: 'power2.out', overwrite: true });
     });
   }
 
@@ -182,22 +155,18 @@ document.querySelectorAll('[data-portrait-scroll]').forEach((section) => {
       expose(active);
       state(moments[active], revealed.has(active) ? 'visible' : 'pending');
       initialText();
+      zoomPhotos(true);
       return;
     }
     if (playing) return;
     if (index === active) return initialText();
+    const previousImage = images[active];
     const previous = moments[active];
     const incoming = moments[index];
-    const entryDirection = index > active ? 1 : -1;
     const run = ++generation;
     playing = true;
     state(incoming, 'preparing');
-    // Continue the visible overlay from its actual preview position, without a reset flash.
-    const start = incoming.hasAttribute('data-portrait-preview')
-      ? Number(gsap.getProperty(images[index]!, 'xPercent'))
-      : entryDirection * 100;
-    clearPreview();
-    gsap.set(images[index], { xPercent: start });
+    gsap.set(images[index], { opacity: 0, scale: 1.045 });
     previous.setAttribute('data-leaving', '');
     active = index;
     expose(active);
@@ -207,7 +176,7 @@ document.querySelectorAll('[data-portrait-scroll]').forEach((section) => {
         timeline = gsap.timeline({
           onComplete: () => {
             previous.removeAttribute('data-leaving');
-            gsap.set(images, { clearProps: 'transform' });
+            gsap.set(images, { clearProps: 'transform,opacity' });
             gsap.set(previous.querySelectorAll(COPY), { clearProps: 'opacity' });
             playing = false;
             timeline = undefined;
@@ -229,7 +198,8 @@ document.querySelectorAll('[data-portrait-scroll]').forEach((section) => {
           0.2
         );
         timeline.call(() => reveal(incoming, handles), [], 0.22);
-        timeline.to(images[index], { xPercent: 0, duration: 0.95, ease: 'power3.out' }, 0.3);
+        timeline.to(images[index], { opacity: 1, scale: 1, duration: 1.2, ease: 'power3.out' }, 0);
+        timeline.to(previousImage, { scale: 1.025, duration: 1.2, ease: 'power3.out' }, 0);
       })
       .catch(fail);
   }
@@ -241,16 +211,10 @@ document.querySelectorAll('[data-portrait-scroll]').forEach((section) => {
         if (!track!.hasAttribute('data-portrait-ready')) return;
         const bounds = track!.getBoundingClientRect();
         const top = parseFloat(getComputedStyle(stage!).top) || 0;
-        const nextPosition = Math.max(0, top - bounds.top) / (innerHeight * 0.8);
-        if (Math.abs(nextPosition - position) > 0.001) direction = nextPosition > position ? 1 : -1;
-        position = nextPosition;
+        position = Math.max(0, top - bounds.top) / (innerHeight * 0.8);
         const index = Math.min(moments.length - 1, Math.floor(position));
         show(index, immediate || bounds.bottom < 0 || bounds.top > innerHeight);
-        if (!playing)
-          previewImage(
-            active + direction,
-            direction > 0 ? position - active : 1 - (position - active)
-          );
+        zoomPhotos(immediate);
       }
       sync = () => update();
       function measure() {

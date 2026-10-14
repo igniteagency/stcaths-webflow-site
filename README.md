@@ -87,16 +87,17 @@ installing this controller so only one controller owns the panels.
 
 On desktop (at least 992px wide and 621px high), scroll selects a panel every 80vh. The
 outgoing text fades for 200ms, incoming headings and paragraphs start their shared reveals
-at 220ms, and the existing 950ms image slide starts at 300ms. Each image transition finishes
-before catching up to the latest scroll destination. Reverse scrolling reverses the image
-direction. Pending text masks release to `clip-path: none`; the action fades in over 200ms.
-Between panel changes, the incoming image previews at the edge by up to 18px, following
-scroll progress with 180ms easing. It enters from the right when scrolling down and the
-left when scrolling back. The timed slide continues from that preview position. The
-Webflow embed reveals only the preview panel's visual at z-index 3; its text stays hidden
-and the panel remains inert and aria-hidden. No elements are added or images enlarged.
-Scroll feedback must move the overlay that performs the transition, rather than the
-stationary photo underneath it. Preview states clear when the sticky enhancement ends.
+at 220ms. A 1.2s focus pull starts at the trigger: the incoming visual dissolves from
+0 opacity and 1.045 scale to full opacity at its normal size; the outgoing visual gently
+scales to 1.025. Each timed transition finishes before catching up to the latest scroll
+destination, including reverse scrolling. Pending text masks release to `clip-path: none`;
+the action fades in over 200ms.
+
+Between triggers, only the current photograph subtly zooms with scroll: its inner image
+scales from 1.02 to 1.06 (4 percentage points), with 160ms easing. The next panel stays
+hidden until its trigger. The zoom uses the inner image so it does not conflict with the
+timed transition on the visual wrapper. All image transforms and transition opacity clear
+when the sticky enhancement ends. The obsolete `data-portrait-preview` state is unused.
 
 Inactive panels are inert and hidden from assistive technology. Mobile, short viewports,
 oversized copy and reduced motion retain complete articles in normal flow. Static-layout
