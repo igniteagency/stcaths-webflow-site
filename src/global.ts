@@ -36,6 +36,7 @@ function initComponents() {
 function UIFunctions() {
   duplicateMarqueeList();
   initDetailsGroups();
+  window.conditionalLoadScript('.navbar-wrapper', 'components/navbar.js');
   if (document.querySelector('[data-handwritten-note], [data-handwriting-reveal]')) {
     void window
       .loadScript('components/handwritten-note.js', { isModule: true })
