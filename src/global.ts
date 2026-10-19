@@ -36,6 +36,11 @@ function initComponents() {
 function UIFunctions() {
   duplicateMarqueeList();
   initDetailsGroups();
+  if (document.querySelector('form [data-conditional-when]')) {
+    void window
+      .loadScript('components/conditional-fields.js')
+      .catch((error) => console.error('Conditional fields unavailable:', error));
+  }
   window.conditionalLoadScript('.navbar-wrapper', 'components/navbar.js');
   if (document.querySelector('[data-handwritten-note], [data-handwriting-reveal]')) {
     void window

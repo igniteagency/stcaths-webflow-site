@@ -686,3 +686,49 @@ The original editable text stays in the accessibility tree and preserves layout.
 Reduced motion, missing component CSS, unsupported glyphs or asset failures leave
 native text visible. The renderer is decorative. Runtime source/renderer spans
 are removed on disposal; editing text at runtime restores the native text.
+
+### Conditional form fields
+
+The global loader automatically loads `components/conditional-fields.js` when a
+native form contains `data-conditional-when`. No `data-conditional-form` or separate
+per-form script is needed. Designer content stays authored and visible; conditions
+apply at runtime.
+
+- On the native input/select, set `data-conditional-field="enquiry-type"`.
+- On a wrapper containing the dependent controls **and their labels/help**, set
+  `data-conditional-when="enquiry-type"` and `data-conditional-is="other"`.
+- `data-conditional-is="admissions|fees"` matches either actual option value, not
+  its visible label. Matching is exact and case-sensitive. Spaces around pipe
+  alternatives are trimmed; controller values are never normalized.
+- A single checkbox uses `data-conditional-is="true"` or `"false"`, independent
+  of its native value. Mark every radio in a group with the same
+  `data-conditional-field` key and native `name`; its checked radio's value is used.
+  Ordinary text inputs and textareas use their current value.
+
+Keys resolve only within the nearest native form. Nested groups require both
+parent and child conditions to be active. Hidden, inert, or disabled controllers
+within the form cannot activate dependents, including a checkbox's `false` branch.
+An initially hidden form or display-hidden ancestor dialog does not erase active
+prefilled answers. Inactive groups
+are hidden with an inline `display: none !important` override and their controls
+are disabled and made optional. Reactivation restores authored display, hidden,
+required and disabled settings. If the only required radio is hidden, a remaining
+available radio in its native group temporarily carries that requirement.
+
+Inactive answers are cleared (including checked states, selections and files), so
+switching back does not restore stale answers. Button labels and fields outside
+conditional groups are preserved. Active initial/prefilled answers remain intact.
+Updates run on input/change, after native reset restores defaults, and on pageshow.
+Submission handling is unchanged. Native Webflow checkbox/radio checked visuals
+stay synchronized when conditional answers are cleared or native defaults return.
+
+Missing, empty, or ambiguous rules stay authored and emit a value-free developer
+diagnostic; a valid inactive ancestor still hides/clears its entire branch. Orphan
+wrappers are ignored. Use unique keys except for same-name radios; empty OR
+alternatives are unsupported. Author acyclic dependencies and static markup:
+initialization runs once per form, without observing inserted fields or later
+required/disabled/style changes. Programmatic value changes should dispatch
+`input` or `change`. Multi-select controllers and externally form-associated
+controls are unsupported.
+
+Run `node --test tests/conditional-fields.test.mjs` for the VM-based behavioral tests.
