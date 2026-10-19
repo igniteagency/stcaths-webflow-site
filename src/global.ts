@@ -34,6 +34,10 @@ function initComponents() {
 }
 
 function UIFunctions() {
+  window.conditionalLoadScript(
+    '[data-history-timeline="component"]',
+    'components/history-timeline.js'
+  );
   duplicateMarqueeList();
   initDetailsGroups();
   if (document.querySelector('form [data-conditional-when]')) {
