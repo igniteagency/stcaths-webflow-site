@@ -18,7 +18,9 @@ function harness({
   fontsLoading = false,
   segmenter = true,
   deferCompletion = false,
+  scale = 1,
 } = {}) {
+  const layout = { scale };
   const animations = [],
     timers = new Map(),
     frames = new Map(),
@@ -106,8 +108,12 @@ function harness({
           if (this.matches(not[1])) return false;
           part = part.replace(not[0], '');
         }
-        if (part.startsWith('.'))
-          return (this.getAttribute('class') ?? '').split(' ').includes(part.slice(1));
+        const classSelector = part.match(/^([a-z][\w-]*)?\.([\w-]+)$/i);
+        if (classSelector)
+          return (
+            (!classSelector[1] || classSelector[1].toUpperCase() === this.tagName) &&
+            (this.getAttribute('class') ?? '').split(' ').includes(classSelector[2])
+          );
         const attr = part.match(/^\[([^=\]]+)(?:="([^"]*)")?\]$/);
         if (attr)
           return attr[2] === undefined
@@ -146,15 +152,21 @@ function harness({
       nodes.forEach((n) => this.appendChild(n));
     }
     getBoundingClientRect() {
+      const cssDimension = (name, fallback) => {
+        const value = this.style.cssText?.match(new RegExp('(?:^|;)' + name + ':([\\d.]+)px'));
+        return (value ? Number(value[1]) : fallback) * layout.scale;
+      };
+      const width = cssDimension('width', this.clientWidth);
+      const height = cssDimension('height', this.clientHeight);
       return {
         x: 0,
         y: 0,
         left: 0,
         top: 0,
-        right: this.clientWidth,
-        bottom: this.clientHeight,
-        width: this.clientWidth,
-        height: this.clientHeight,
+        right: width,
+        bottom: height,
+        width,
+        height,
       };
     }
     getClientRects() {
@@ -201,7 +213,12 @@ function harness({
       return [this.getBoundingClientRect()];
     },
     getBoundingClientRect() {
-      return { left: this.start * 8, top: 0, width: (this.end - this.start) * 8, height: 20 };
+      return {
+        left: this.start * 8 * layout.scale,
+        top: 0,
+        width: (this.end - this.start) * 8 * layout.scale,
+        height: 20 * layout.scale,
+      };
     },
   });
   const fonts = new Events();
@@ -268,9 +285,15 @@ function harness({
     if (content !== undefined) el.textContent = content;
     return el;
   };
-  function button(content = 'Enquire', direct = false, parent = document, tag = 'A') {
+  function button(
+    content = 'Enquire',
+    direct = false,
+    parent = document,
+    tag = 'A',
+    className = 'button_link'
+  ) {
     const component = create('DIV', 'button_component');
-    const link = create(tag, 'button_link');
+    const link = create(tag, className);
     link.setAttribute('aria-label', 'Authored name');
     link.setAttribute('href', '#destination');
     const label = create('P', 'button_text', content);
@@ -289,6 +312,7 @@ function harness({
     create,
     document,
     context,
+    layout,
     animations,
     timers,
     frames,
@@ -371,6 +395,82 @@ test('overlay owns sibling label, exact concept WAAPI and exact native restorati
   await h.tick(1);
   h.clean();
   assert.ok(h.animations.every((a) => a.cancelled));
+});
+
+test('native submit wrappers roll on pointer and keyboard events without a link overlay', async () => {
+  const h = harness();
+  h.document.replaceChildren();
+  const native = h.button('Submit', true, h.document, 'BUTTON', 'button_content-wrapper');
+  native.link.removeAttribute('href');
+  native.link.setAttribute('type', 'submit');
+  native.link.setAttribute('name', 'action');
+  native.link.setAttribute('value', 'enquire');
+  const attributes = [...native.link.attrs];
+  h.run();
+  h.context.stCathsButtonText.init(native.link);
+  const events = ['pointerenter', 'pointerleave', 'focus', 'blur'];
+  assert.deepEqual([...native.link.listeners.keys()].sort(), [...events].sort());
+  for (const [index, event] of events.entries()) {
+    await h.event(event, native.link);
+    assert.equal(h.animations.length, (index + 1) * 12);
+    assert.equal(h.animations.at(-1).options.delay, 125);
+    await h.tick(710);
+    h.clean(native);
+  }
+  assert.deepEqual([...native.link.attrs], attributes);
+});
+
+test('a native submit disabled during form setup can animate once enabled', async () => {
+  const h = harness();
+  const native = h.button('Submit', true, h.document, 'BUTTON', 'button_content-wrapper');
+  native.link.setAttribute('disabled', '');
+  h.run();
+  await h.event('pointerenter', native.link);
+  assert.equal(h.animations.length, 0);
+  h.clean(native);
+  native.link.removeAttribute('disabled');
+  await h.event('focus', native.link);
+  assert.equal(h.animations.length, 12);
+  await h.tick(710);
+  h.clean(native);
+  native.link.setAttribute('disabled', '');
+  await h.event('pointerleave', native.link);
+  assert.equal(h.animations.length, 12);
+});
+
+test('overlay links and native wrappers only animate their own labels', async () => {
+  const h = harness();
+  const native = h.create('BUTTON', 'button_content-wrapper');
+  const label = h.create('P', 'button_text', 'Submit');
+  native.append(label);
+  h.component.append(native);
+  const nativeLabel = { label, nodes: [...label.childNodes], attrs: [...label.attrs] };
+  h.run();
+  await h.event('pointerenter');
+  assert.equal(h.animations.length, 14);
+  h.clean(nativeLabel);
+  await h.tick(735);
+  await h.event('focus', native);
+  assert.equal(h.animations.length, 26);
+  h.clean();
+  await h.tick(710);
+  h.clean(nativeLabel);
+});
+
+test('hover scaling preserves local glyph spacing and does not cancel the roll', async () => {
+  const h = harness({ scale: 1.03 });
+  h.run();
+  await h.event('pointerenter');
+  const viewport = h.label.children[2].children[6];
+  const left = Number(viewport.style.cssText.match(/left:([^;]+)px/)[1]);
+  const width = Number(viewport.style.cssText.match(/width:([^;]+)px/)[1]);
+  assert.ok(Math.abs(left - (6 * 8 - 3.2)) < 0.001);
+  assert.ok(Math.abs(width - (8 + 6.4)) < 0.001);
+  h.layout.scale = 1.01;
+  h.observers.forEach((observer) => observer.fn([]));
+  assert.ok(h.animations.every((animation) => !animation.cancelled));
+  await h.tick(735);
+  h.clean();
 });
 
 test('direct labels, independent siblings and nested components never cross-bind', async () => {
