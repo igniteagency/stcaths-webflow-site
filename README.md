@@ -732,3 +732,30 @@ required/disabled/style changes. Programmatic value changes should dispatch
 controls are unsupported.
 
 Run `node --test tests/conditional-fields.test.mjs` for the VM-based behavioral tests.
+
+### History timeline
+
+`src/components/history-timeline.ts` adapts the timeline and gallery behaviour from
+[KRB's history timeline](https://github.com/igniteagency/krb-webflow-site/blob/a80df2c7a7f5d79e005025c8fe59edfbf208c33e/src/components/history-timeline.ts)
+and its sibling `lightbox.ts`. The existing global loader loads the component when
+`data-history-timeline="component"` is present.
+
+Year selection, previous/next controls and dragging the year rail keep the main
+slider in sync. Repeated year groups let the rail move on every selection and
+wrap in either direction, even when all six milestones fit on desktop. The rail
+silently recentres on an identical group after wrapping. Only the active year is
+in the tab order; arrow keys move between milestones.
+
+Galleries support keyboard navigation, horizontal touch swipes,
+linked full-size images and image-alt caption fallbacks. St Catherine's existing
+attribute hooks, native dialog and Webflow component styles are retained.
+The native `history-timeline_nav-swiper-slide` style uses `flex-grow: 0` and
+`width: max(6rem, calc(100% / 6))` so repeated years overflow the rail. The marker
+pseudo-element remains in the existing Webflow component embed.
+
+Optional attributes on the component follow KRB's millisecond settings:
+`data-history-timeline-duration="700"` sets slide transitions and
+`data-history-timeline-image-duration="3500"` sets image rotation within a year.
+These defaults apply when omitted or invalid. Reduced motion disables animation
+and rotation; hover, keyboard focus, an open gallery and a hidden document pause
+rotation. No new authored Webflow attributes are required for these defaults.

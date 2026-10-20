@@ -3,6 +3,12 @@ import { A11y, Navigation } from 'swiper/modules';
 
 const hook = (name: string) => `[data-history-timeline="${name}"]`;
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+const IMAGE_EXT_PATTERN = /\.(jpe?g|png|webp|gif|avif)(\?.*)?$/i;
+
+function positiveNumber(value: string | undefined, fallback: number) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : fallback;
+}
 
 function initTimeline(component: HTMLElement) {
   const section = component.closest('section');
@@ -17,24 +23,38 @@ function initTimeline(component: HTMLElement) {
   if (!slides.length || component.dataset.historyReady) return;
   component.dataset.historyReady = 'true';
 
-  const buttons = slides.map((slide, index) => {
-    const button = template.cloneNode(true) as HTMLButtonElement;
-    const year = slide.querySelector<HTMLElement>('[data-history-year]')?.dataset.historyYear || '';
-    button.removeAttribute('data-history-timeline');
-    button.querySelector('[data-history-year]')!.textContent = year;
-    button.setAttribute('aria-label', `Go to ${year}`);
-    button.addEventListener('click', () => swiper.slideToLoop(index));
-    return button;
-  });
+  // Keep a full viewport of repeated years on either side, as in KRB's rail.
+  const navCopyCount = slides.length > 1 ? Math.ceil(6 / slides.length) * 2 + 1 : 1;
+  const middleOffset = Math.floor(navCopyCount / 2) * slides.length;
+  let navDisplayIndex = middleOffset;
+  let navResetTimer: ReturnType<typeof setTimeout> | undefined;
+  const buttons = Array.from({ length: navCopyCount }).flatMap(() =>
+    slides.map((slide, index) => {
+      const button = template.cloneNode(true) as HTMLButtonElement;
+      const year =
+        slide.querySelector<HTMLElement>('[data-history-year]')?.dataset.historyYear || '';
+      button.removeAttribute('data-history-timeline');
+      button.querySelector('[data-history-year]')!.textContent = year;
+      button.setAttribute('aria-label', `Go to ${year}`);
+      button.dataset.historyIndex = String(index);
+      button.tabIndex = -1;
+      button.addEventListener('click', () => swiper.slideToLoop(index));
+      return button;
+    })
+  );
   navTrack.replaceChildren(...buttons);
-  const speed = () => (reducedMotion.matches ? 0 : 700);
+  const duration = positiveNumber(component.dataset.historyTimelineDuration, 700);
+  const imageDuration = positiveNumber(component.dataset.historyTimelineImageDuration, 3500);
+  const speed = () => (reducedMotion.matches ? 0 : duration);
   const nav = new Swiper(rail, {
     wrapperClass: 'history-timeline_nav-swiper-wrapper',
     slideClass: 'history-timeline_nav-swiper-slide',
     slidesPerView: 'auto',
     speed: speed(),
     watchSlidesProgress: true,
+    initialSlide: middleOffset,
   });
+  let syncingNav = false;
   const swiper = new Swiper(main, {
     modules: [Navigation, A11y],
     wrapperClass: 'history-timeline_wrapper',
@@ -85,25 +105,62 @@ function initTimeline(component: HTMLElement) {
     timer = setInterval(() => {
       imageIndex = (imageIndex + 1) % figures.length;
       showImage(figures, imageIndex);
-    }, 3500);
+    }, imageDuration);
   }
 
   function sync() {
     imageIndex = 0;
     slides.forEach((slide, index) => {
       slide.inert = index !== swiper.realIndex;
-      buttons[index].setAttribute('aria-current', String(index === swiper.realIndex));
     });
     showImage(galleries[swiper.realIndex], 0);
-    nav.slideTo(swiper.realIndex, speed());
+    syncNavRail(swiper.realIndex);
     rotateImages();
+  }
+
+  function updateNavState() {
+    const focused = navTrack!.contains(document.activeElement);
+    buttons.forEach((button, index) => {
+      button.setAttribute('aria-current', String(index === navDisplayIndex));
+      button.tabIndex = index === navDisplayIndex ? 0 : -1;
+    });
+    if (focused) buttons[navDisplayIndex].focus({ preventScroll: true });
+  }
+
+  function syncNavRail(index: number) {
+    clearTimeout(navResetTimer);
+    const candidates = Array.from(
+      { length: navCopyCount },
+      (_, copy) => copy * slides.length + index
+    );
+    navDisplayIndex = candidates.reduce((closest, candidate) =>
+      Math.abs(candidate - navDisplayIndex) < Math.abs(closest - navDisplayIndex)
+        ? candidate
+        : closest
+    );
+    syncingNav = true;
+    nav.slideTo(navDisplayIndex, speed(), false);
+    syncingNav = false;
+    updateNavState();
+    const middleIndex = middleOffset + index;
+    if (navDisplayIndex === middleIndex) return;
+    navResetTimer = setTimeout(() => {
+      navDisplayIndex = middleIndex;
+      syncingNav = true;
+      nav.slideTo(middleIndex, 0, false);
+      syncingNav = false;
+      updateNavState();
+    }, speed() + 50);
   }
 
   function renderGallery() {
     const image = galleryImages[galleryIndex];
-    galleryImage.src = image.currentSrc || image.src;
+    const link = image.closest<HTMLAnchorElement>('a[href]');
+    galleryImage.src =
+      link && IMAGE_EXT_PATTERN.test(link.href) ? link.href : image.currentSrc || image.src;
     galleryImage.alt = image.alt;
-    caption.textContent = image.closest('figure')?.querySelector('figcaption')?.textContent || '';
+    caption.textContent =
+      image.closest('figure')?.querySelector('figcaption')?.textContent || image.alt;
     counter.textContent = `${galleryIndex + 1} / ${galleryImages.length}`;
     previous.hidden = next.hidden = galleryImages.length < 2;
   }
@@ -134,7 +191,10 @@ function initTimeline(component: HTMLElement) {
         dialog.showModal();
         clearInterval(timer);
       };
-      image.addEventListener('click', open);
+      image.addEventListener('click', (event) => {
+        event.preventDefault();
+        open();
+      });
       image.addEventListener('keydown', (event) => {
         if (event.key !== 'Enter' && event.key !== ' ') return;
         event.preventDefault();
@@ -145,6 +205,33 @@ function initTimeline(component: HTMLElement) {
   dialog.querySelector(hook('lightbox-close'))!.addEventListener('click', () => dialog.close());
   previous.addEventListener('click', () => stepGallery(-1));
   next.addEventListener('click', () => stepGallery(1));
+  let touchStart: { x: number; y: number } | undefined;
+  galleryImage.addEventListener(
+    'touchstart',
+    (event) => {
+      if (event.touches.length !== 1) {
+        touchStart = undefined;
+        return;
+      }
+      touchStart = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+    },
+    { passive: true }
+  );
+  galleryImage.addEventListener(
+    'touchend',
+    (event) => {
+      if (!touchStart || !event.changedTouches.length) return;
+      const diffX = event.changedTouches[0].clientX - touchStart.x;
+      const diffY = event.changedTouches[0].clientY - touchStart.y;
+      touchStart = undefined;
+      if (Math.abs(diffX) > 45 && Math.abs(diffX) > Math.abs(diffY))
+        stepGallery(diffX > 0 ? -1 : 1);
+    },
+    { passive: true }
+  );
+  galleryImage.addEventListener('touchcancel', () => {
+    touchStart = undefined;
+  });
   dialog.addEventListener('keydown', (event) => {
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
       event.preventDefault();
@@ -167,6 +254,32 @@ function initTimeline(component: HTMLElement) {
     rotateImages();
   });
   swiper.on('slideChange', sync);
+  // Ported from KRB: dragging the year rail also selects the milestone.
+  nav.on('slideChange', () => {
+    if (syncingNav) return;
+    navDisplayIndex = nav.activeIndex;
+    const index = navDisplayIndex % slides.length;
+    if (swiper.realIndex !== index) swiper.slideToLoop(index, speed());
+    else syncNavRail(index);
+  });
+  nav.on('touchStart', () => clearTimeout(navResetTimer));
+  nav.on('touchEnd', () => syncNavRail(swiper.realIndex));
+  nav.on('beforeResize', () => {
+    syncingNav = true;
+  });
+  nav.on('resize', () => {
+    clearTimeout(navResetTimer);
+    navDisplayIndex = middleOffset + swiper.realIndex;
+    nav.slideTo(navDisplayIndex, 0, false);
+    syncingNav = false;
+    updateNavState();
+  });
+  navTrack.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    if (event.key === 'ArrowLeft') swiper.slidePrev(speed());
+    else swiper.slideNext(speed());
+  });
   swiper.on('transitionEnd', () => swiper.updateAutoHeight(0));
   const resizeObserver = new ResizeObserver(() => {
     if (!swiper.animating) swiper.updateAutoHeight(0);
