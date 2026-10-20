@@ -56,7 +56,10 @@ function UIFunctions() {
       .querySelector('[data-hero-intro-content]')
       ?.setAttribute('data-text-trigger', 'manual');
   }
-  window.conditionalLoadScript('.button_link', 'components/button-text.js');
+  window.conditionalLoadScript(
+    '.button_link, button.button_content-wrapper',
+    'components/button-text.js'
+  );
   if (document.querySelector('[data-nav-wordmark]')) {
     void window
       .loadScript('components/nav-wordmark.js')

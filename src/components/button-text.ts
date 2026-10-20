@@ -1,4 +1,4 @@
-const LINK = '.button_link';
+const TRIGGER = '.button_link, button.button_content-wrapper';
 const LABEL = '.button_text';
 const COMPONENT = '.button_component';
 const OFF =
@@ -11,20 +11,24 @@ const ACCESSIBLE_TEXT_STYLE =
 
 function labelsFor(link: HTMLElement) {
   const component = link.closest(COMPONENT);
-  return Array.from((component ?? link).querySelectorAll<HTMLElement>(LABEL)).filter(
+  const scope = link.matches('button.button_content-wrapper') ? link : (component ?? link);
+  return Array.from(scope.querySelectorAll<HTMLElement>(LABEL)).filter(
     (label) =>
       label.closest(COMPONENT) === component &&
-      (!label.closest(LINK) || label.closest(LINK) === link)
+      (!label.closest(TRIGGER) || label.closest(TRIGGER) === link)
   );
 }
 
-function enabled(element: HTMLElement) {
-  return element.isConnected && !element.closest(OFF + ',' + DISABLED + ',' + UNSAFE);
+function enabled(element: HTMLElement, allowDisabled = false) {
+  return (
+    element.isConnected &&
+    !element.closest(OFF + ',' + UNSAFE + (allowDisabled ? '' : ',' + DISABLED))
+  );
 }
 
-function safeLabel(label: HTMLElement) {
+function safeLabel(label: HTMLElement, allowDisabled = false) {
   return (
-    enabled(label) &&
+    enabled(label, allowDisabled) &&
     !label.matches('a,button,input,select,textarea,[tabindex],[role],[aria-live]') &&
     !!label.textContent?.trim() &&
     Array.from(label.childNodes).every(
@@ -90,29 +94,41 @@ function rollLabel(label: HTMLElement) {
     accessible.style.cssText = ACCESSIBLE_TEXT_STYLE;
     const visual = document.createElement('span');
     visual.setAttribute('aria-hidden', 'true');
+    // A known local size converts viewport measurements without rounding layout dimensions.
+    visual.style.cssText =
+      'position:absolute;left:0;top:0;width:100px;height:100px;pointer-events:none;visibility:hidden';
+    if (style.position === 'static') label.style.position = 'relative';
+    label.replaceChildren(native, accessible, visual);
+    const origin = visual.getBoundingClientRect();
+    const scaleX = origin.width / 100;
+    const scaleY = origin.height / 100;
+    if (!scaleX || !scaleY) {
+      restore();
+      return null;
+    }
+    visual.style.cssText = 'position:absolute;inset:0;pointer-events:none';
     const padding = parseFloat(style.fontSize) * 0.2;
     const letters = glyphs.map((glyph, index) => {
       const box = boxes[index];
+      const height = box.height / scaleY;
       const viewport = document.createElement('span');
       viewport.style.cssText =
         `position:absolute;pointer-events:none;overflow:hidden;` +
-        `left:${box.left - bounds.left - label.clientLeft + label.scrollLeft - padding}px;` +
-        `top:${box.top - bounds.top - label.clientTop + label.scrollTop - padding}px;` +
-        `width:${box.width + padding * 2}px;height:${box.height + padding * 2}px`;
+        `left:${(box.left - origin.left) / scaleX - padding}px;` +
+        `top:${(box.top - origin.top) / scaleY - padding}px;` +
+        `width:${box.width / scaleX + padding * 2}px;height:${height + padding * 2}px`;
       const outgoing = document.createElement('span');
       const incoming = document.createElement('span');
       for (const copy of [outgoing, incoming]) {
         copy.textContent = glyph;
         copy.style.cssText =
           `position:absolute;display:block;white-space:pre;left:${padding}px;top:${padding}px;` +
-          `height:${box.height}px;line-height:${box.height}px`;
+          `height:${height}px;line-height:${height}px`;
       }
       viewport.append(outgoing, incoming);
       visual.append(viewport);
       return [outgoing, incoming];
     });
-    if (style.position === 'static') label.style.position = 'relative';
-    label.replaceChildren(native, accessible, visual);
     const after = label.getBoundingClientRect();
     if (
       Math.abs(after.width - bounds.width) > 0.5 ||
@@ -261,14 +277,18 @@ function createButtonText(): ButtonTextAPI {
         const sizes = new Map<HTMLElement, { width: number; height: number }>();
         for (const label of labels) {
           for (const target of [label, label.parentElement]) {
-            if (target) sizes.set(target, target.getBoundingClientRect());
+            if (target)
+              sizes.set(target, { width: target.clientWidth, height: target.clientHeight });
           }
         }
         if (window.ResizeObserver) {
           resize = new ResizeObserver(() => {
             for (const [target, size] of sizes) {
-              const next = target.getBoundingClientRect();
-              if (!target.isConnected || next.width !== size.width || next.height !== size.height)
+              if (
+                !target.isConnected ||
+                target.clientWidth !== size.width ||
+                target.clientHeight !== size.height
+              )
                 return cancel();
             }
           });
@@ -318,11 +338,12 @@ function createButtonText(): ButtonTextAPI {
   }
   return {
     init(root: ParentNode = document) {
-      const links = Array.from(root.querySelectorAll<HTMLElement>(LINK));
-      if (root instanceof HTMLElement && root.matches(LINK)) links.unshift(root);
+      const links = Array.from(root.querySelectorAll<HTMLElement>(TRIGGER));
+      if (root instanceof HTMLElement && root.matches(TRIGGER)) links.unshift(root);
       for (const link of links) {
-        if (bindings.has(link) || !enabled(link)) continue;
-        const labels = labelsFor(link).filter(safeLabel);
+        const nativeButton = link.matches('button.button_content-wrapper');
+        if (bindings.has(link) || !enabled(link, nativeButton)) continue;
+        const labels = labelsFor(link).filter((label) => safeLabel(label, nativeButton));
         if (labels.length) bind(link, labels);
       }
     },

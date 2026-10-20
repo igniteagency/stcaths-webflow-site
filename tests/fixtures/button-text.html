@@ -47,7 +47,7 @@
         inset: 0;
         z-index: 1;
       }
-      .button_content-wrapper {
+      .button_content-wrapper:not(button) {
         pointer-events: none;
       }
       .button_text {
@@ -90,7 +90,8 @@
       #destination {
         margin-top: 20px;
       }
-      .button_link:focus-visible {
+      .button_link:focus-visible,
+      button.button_content-wrapper:focus-visible {
         outline: 3px solid #886622;
         outline-offset: 4px;
       }
@@ -112,7 +113,13 @@
             <path d="M1 6h10M7 2l4 4-4 4" fill="none" stroke="currentColor" /></svg
         ></a>
         <form action="/native-submit" method="get" target="submit-result">
-          <button class="button_link direct" id="native-button" name="action" value="tour">
+          <button
+            class="button_content-wrapper direct"
+            id="native-button"
+            type="submit"
+            name="action"
+            value="tour"
+          >
             <span class="button_text" id="button-label">Book a tour</span>
           </button>
         </form>
