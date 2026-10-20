@@ -732,3 +732,23 @@ required/disabled/style changes. Programmatic value changes should dispatch
 controls are unsupported.
 
 Run `node --test tests/conditional-fields.test.mjs` for the VM-based behavioral tests.
+
+### History timeline
+
+`src/components/history-timeline.ts` adapts the timeline and gallery behaviour from
+[KRB's history timeline](https://github.com/igniteagency/krb-webflow-site/blob/a80df2c7a7f5d79e005025c8fe59edfbf208c33e/src/components/history-timeline.ts)
+and its sibling `lightbox.ts`. The existing global loader loads the component when
+`data-history-timeline="component"` is present.
+
+Year selection, previous/next controls and dragging the year rail keep the main
+slider in sync. Galleries support keyboard navigation, horizontal touch swipes,
+linked full-size images and image-alt caption fallbacks. St Catherine's existing
+attribute hooks, native dialog, flexible year row and Webflow component styles
+are retained; KRB's repeated year buttons and injected lightbox CSS are not used.
+
+Optional attributes on the component follow KRB's millisecond settings:
+`data-history-timeline-duration="700"` sets slide transitions and
+`data-history-timeline-image-duration="3500"` sets image rotation within a year.
+These defaults apply when omitted or invalid. Reduced motion disables animation
+and rotation; hover, keyboard focus, an open gallery and a hidden document pause
+rotation. No new Webflow attributes or style edits are required for the defaults.
