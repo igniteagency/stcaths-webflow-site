@@ -7,6 +7,7 @@ import {
 } from '$utils/text-motion-settings';
 
 const OFF = '[data-text-reveal="off"],[data-no-text-motion],[data-no-heading-motion]';
+const RICH_TEXT = '.w-richtext,.rich-text';
 const MANUAL = '[data-text-trigger="manual"]';
 const INTERACTIVE =
   'a,button,summary,label,input,select,textarea,[inert],[onclick],[onkeydown],' +
@@ -106,17 +107,23 @@ function createTextReveal(): TextRevealAPI {
   const seen = new WeakSet<HTMLElement>();
   const active = new Map<HTMLElement, () => void>();
 
-  function track(element: HTMLElement, automatic: boolean, options: TextRevealOptions = {}) {
+  function track(
+    element: HTMLElement,
+    automatic: boolean,
+    options: TextRevealOptions = {},
+    members: HTMLElement[] = [element]
+  ) {
     const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
     let container = element.parentElement;
     while (container && !container.clientWidth) container = container.parentElement;
     let done = false;
     let preparing = false;
     let restore: (() => void) | undefined;
-    let revertSplit: (() => void) | undefined;
+    const splitRestores: (() => void)[] = [];
+    const nodeRestores: (() => void)[] = [];
     let animation: TextRevealHandle['animation'] | undefined;
     let trigger: ReturnType<Window['ScrollTrigger']['create']> | undefined;
-    let width = 0;
+    let widths: number[] = [];
     let parentWidth = 0;
     const originalLinks = new Map<HTMLElement, HTMLElement>();
 
@@ -125,18 +132,18 @@ function createTextReveal(): TextRevealAPI {
       done = true;
       const focused = document.activeElement?.closest<HTMLElement>('a');
       const restoreFocus = focused && originalLinks.get(focused);
-      active.delete(element);
+      members.forEach((member) => active.delete(member));
       resize.disconnect();
       visibility.disconnect();
       motion.removeEventListener('change', onMotion);
       document.fonts?.removeEventListener('loadingdone', onFonts);
       window.removeEventListener('resize', onResize);
       window.removeEventListener('pagehide', finish);
-      element.removeEventListener('focusin', onFocus);
+      members.forEach((member) => member.removeEventListener('focusin', onFocus));
       try {
         trigger?.kill();
         animation?.kill();
-        revertSplit?.();
+        splitRestores.forEach((revert) => revert());
       } catch (error) {
         console.error('Text reveal cleanup:', error);
       } finally {
@@ -170,10 +177,9 @@ function createTextReveal(): TextRevealAPI {
         await document.fonts?.ready;
         if (done) return null;
         if (
-          !isSafe(element, automatic) ||
+          !members.every((member) => isSafe(member, automatic) && isMeasurable(member)) ||
           motion.matches ||
-          !isMeasurable(element) ||
-          element.contains(document.activeElement)
+          members.some((member) => member.contains(document.activeElement))
         ) {
           finish();
           return null;
@@ -203,56 +209,62 @@ function createTextReveal(): TextRevealAPI {
             });
           }
         }
-        const text = (element.innerText || element.textContent || '').replace(/\s+/g, ' ').trim();
-        // Preserve IDs/state, named descendants, and link semantics in character/word reveals.
-        const whole =
-          !!element.querySelector(UNSAFE_INLINE) ||
-          Array.from(element.querySelectorAll('*')).some((child) =>
-            Array.from(child.attributes).some(({ name }) => name.startsWith('aria-'))
-          ) ||
-          !!element.querySelector(INTERACTIVE.replace(/^a,/, '')) ||
-          (settings.type !== 'lines' && !!element.querySelector('a'));
-        restore = snapshot(element, !whole);
-        let parts: HTMLElement[] = [element];
-        if (!whole) {
-          const links = Array.from(element.querySelectorAll('a'));
-          const keys = links.map((link) => link.getAttribute(LINK_KEY));
-          links.forEach((link, index) => link.setAttribute(LINK_KEY, String(index)));
-          const split = splitText(element, { type: [settings.type] });
-          revertSplit = split.revert;
-          element.querySelectorAll('a').forEach((link) => {
-            const index = Number(link.getAttribute(LINK_KEY));
-            const original = links[index];
-            if (!original) return;
-            originalLinks.set(link, original);
-            const key = keys[index];
-            if (key == null) link.removeAttribute(LINK_KEY);
-            else link.setAttribute(LINK_KEY, key);
-          });
-          // Restore readable native links as soon as keyboard focus enters the split.
-          if (originalLinks.size) element.addEventListener('focusin', onFocus);
-          parts = split[settings.type];
-          if (!parts.length) {
-            finish();
-            return null;
-          }
-          if (settings.type !== 'lines') {
-            split.lines.forEach((line) => line.setAttribute('aria-hidden', 'true'));
-            if (/^H[1-6]$/.test(element.tagName)) {
-              if (
-                !element.getAttribute('aria-label')?.trim() &&
-                !element.hasAttribute('aria-labelledby')
-              )
-                element.setAttribute('aria-label', text);
-            } else {
-              const accessibleText = document.createElement('span');
-              accessibleText.textContent = text;
-              accessibleText.style.cssText = ACCESSIBLE_TEXT_STYLE;
-              element.appendChild(accessibleText);
+        restore = () => nodeRestores.forEach((restoreNode) => restoreNode());
+        const parts = members.flatMap((element) => {
+          if (done) return [];
+          const text = (element.innerText || element.textContent || '').replace(/\s+/g, ' ').trim();
+          // Preserve IDs/state, named descendants, and link semantics in character/word reveals.
+          const whole =
+            !!element.querySelector(UNSAFE_INLINE) ||
+            Array.from(element.querySelectorAll('*')).some((child) =>
+              Array.from(child.attributes).some(({ name }) => name.startsWith('aria-'))
+            ) ||
+            !!element.querySelector(INTERACTIVE.replace(/^a,/, '')) ||
+            (settings.type !== 'lines' && !!element.querySelector('a'));
+          nodeRestores.push(snapshot(element, !whole));
+          let parts: HTMLElement[] = [element];
+          if (!whole) {
+            const links = Array.from(element.querySelectorAll('a'));
+            const keys = links.map((link) => link.getAttribute(LINK_KEY));
+            links.forEach((link, index) => link.setAttribute(LINK_KEY, String(index)));
+            const split = splitText(element, { type: [settings.type] });
+            splitRestores.push(split.revert);
+            element.querySelectorAll('a').forEach((link) => {
+              const index = Number(link.getAttribute(LINK_KEY));
+              const original = links[index];
+              if (!original) return;
+              originalLinks.set(link, original);
+              const key = keys[index];
+              if (key == null) link.removeAttribute(LINK_KEY);
+              else link.setAttribute(LINK_KEY, key);
+            });
+            // Restore readable native links as soon as keyboard focus enters the split.
+            if (originalLinks.size) element.addEventListener('focusin', onFocus);
+            parts = split[settings.type];
+            if (!parts.length) {
+              finish();
+              return [];
+            }
+            if (settings.type !== 'lines') {
+              split.lines.forEach((line) => line.setAttribute('aria-hidden', 'true'));
+              if (/^H[1-6]$/.test(element.tagName)) {
+                if (
+                  !element.getAttribute('aria-label')?.trim() &&
+                  !element.hasAttribute('aria-labelledby')
+                )
+                  element.setAttribute('aria-label', text);
+              } else {
+                const accessibleText = document.createElement('span');
+                accessibleText.textContent = text;
+                accessibleText.style.cssText = ACCESSIBLE_TEXT_STYLE;
+                element.appendChild(accessibleText);
+              }
             }
           }
-        }
-        width = element.clientWidth;
+          return parts;
+        });
+        if (done || !parts.length) return null;
+        widths = members.map((member) => member.clientWidth);
         parentWidth = container?.clientWidth ?? 0;
         animation = window.gsap.fromTo(
           parts,
@@ -305,7 +317,8 @@ function createTextReveal(): TextRevealAPI {
     }
     function refresh() {
       if (done) return;
-      if (!element.isConnected || !isSafe(element, automatic)) return finish();
+      if (members.some((member) => !member.isConnected || !isSafe(member, automatic)))
+        return finish();
       if (restore || !automatic || !isMeasurable(element)) return;
       try {
         if (!trigger) {
@@ -339,9 +352,10 @@ function createTextReveal(): TextRevealAPI {
     }
     const resize = new ResizeObserver(() => {
       if (
-        !element.isConnected ||
+        members.some((member) => !member.isConnected) ||
         (restore &&
-          (element.clientWidth !== width || (container?.clientWidth ?? 0) !== parentWidth))
+          (members.some((member, index) => member.clientWidth !== widths[index]) ||
+            (container?.clientWidth ?? 0) !== parentWidth))
       )
         finish();
       else if (!restore) refresh();
@@ -363,12 +377,12 @@ function createTextReveal(): TextRevealAPI {
         });
       }
     }
-    active.set(element, finish);
+    members.forEach((member) => active.set(member, finish));
     motion.addEventListener('change', onMotion);
     document.fonts?.addEventListener('loadingdone', onFonts);
     window.addEventListener('resize', onResize);
     window.addEventListener('pagehide', finish);
-    resize.observe(element);
+    members.forEach((member) => resize.observe(member));
     if (container) resize.observe(container);
     return { prepare, refresh };
   }
@@ -385,16 +399,32 @@ function createTextReveal(): TextRevealAPI {
     init(root: ParentNode = document) {
       const targets = Array.from(root.querySelectorAll<HTMLElement>(TEXT_REVEAL_SELECTOR));
       if (root instanceof HTMLElement && root.matches(TEXT_REVEAL_SELECTOR)) targets.unshift(root);
+      const groups: HTMLElement[][] = [];
+      let previousScope: HTMLElement | null = null;
       targets.forEach((element) => {
+        const scope = element.closest<HTMLElement>(RICH_TEXT);
+        const groupable =
+          scope &&
+          element.tagName === 'P' &&
+          presetFor(element) === 'paragraph' &&
+          !element.closest('li,blockquote') &&
+          !seen.has(element) &&
+          isSafe(element, true);
+        if (groupable && scope === previousScope) groups.at(-1)!.push(element);
+        else groups.push([element]);
+        previousScope = groupable ? scope : null;
+      });
+      groups.forEach((members) => {
+        const element = members[0];
         if (seen.has(element) || !isSafe(element, true)) return;
         if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-          seen.add(element);
+          members.forEach((member) => seen.add(member));
           return;
         }
         if (!available() || typeof window.ScrollTrigger?.create !== 'function') return;
         window.gsap.registerPlugin?.(window.ScrollTrigger);
-        seen.add(element);
-        track(element, true).refresh();
+        members.forEach((member) => seen.add(member));
+        track(element, true, {}, members).refresh();
       });
     },
     async create(element, options = {}) {

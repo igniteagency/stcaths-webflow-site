@@ -319,11 +319,14 @@ function harness({
       const line = new Element('SPAN', [text('split')]);
       line.nodeType = 1;
       if (clones.length) line.replaceChildren(...clones);
-      target.replaceChildren(line);
-      if (splitError) throw new Error('partial split failure');
+      const lines = Array.from({ length: target.splitLineCount ?? 1 }, (_, index) =>
+        index === 0 ? line : new Element('SPAN', [text('split line')])
+      );
+      target.replaceChildren(...lines);
+      if (splitError || target.failSplit) throw new Error('partial split failure');
       return {
         chars: emptySplit ? [] : [line],
-        lines: emptySplit ? [] : [line],
+        lines: emptySplit ? [] : lines,
         words: emptySplit ? [] : [line],
         options,
         revert: () => {
@@ -1298,5 +1301,153 @@ test('an already focused paragraph link stays native while create returns null',
   assert.equal(await h.context.stCathsTextReveal.create(h.element), null);
   assert.equal(h.context.document.activeElement, link);
   assert.equal(h.tweens.length, 0);
+  h.assertClean();
+});
+
+function richParagraphs(h) {
+  const rich = new h.Element('DIV', []);
+  rich.setAttribute('class', 'w-richtext');
+  const paragraphs = [h.element, new h.Element('P', [h.text('Second paragraph')])];
+  paragraphs.forEach((paragraph, index) => {
+    paragraph.tagName = 'P';
+    paragraph.splitLineCount = index + 2;
+    const wrapper = new h.Element('DIV', []);
+    wrapper.replaceChildren(paragraph);
+    rich.appendChild(wrapper);
+  });
+  h.targets.splice(0, h.targets.length, ...paragraphs);
+  return { rich, paragraphs };
+}
+
+test('rich paragraph wrappers are transparent to one continuous line stagger', async () => {
+  const h = harness();
+  const { rich, paragraphs } = richParagraphs(h);
+  const wrappers = [...rich.children];
+  const originals = paragraphs.map((paragraph) => [...paragraph.childNodes]);
+  h.run();
+  await h.fontsReady();
+  assert.equal(h.triggers.length, 1);
+  assert.equal(h.tweens.length, 0);
+  await h.intersect();
+  assert.equal(h.tweens.length, 1);
+  assert.deepEqual(
+    [...h.tweens[0].targets],
+    paragraphs.flatMap((p) => p.children)
+  );
+  assert.equal(h.tweens[0].targets.length, 5);
+  assert.equal(h.tweens[0].to.stagger.each, 0.1);
+  assert.equal(h.tweens[0].to.duration, 1.5);
+  assert.deepEqual(rich.children, wrappers);
+  h.init();
+  assert.equal(h.triggers.length, 1);
+  h.tweens[0].to.onComplete();
+  paragraphs.forEach((paragraph, index) =>
+    assert.deepEqual(paragraph.childNodes, originals[index])
+  );
+  assert.deepEqual(rich.children, wrappers);
+  h.assertClean();
+});
+
+for (const end of ['dispose second wrapper', 'second paragraph resize', 'reduced motion']) {
+  test(`grouped rich text restores every paragraph after ${end}`, async () => {
+    const h = harness();
+    const { paragraphs } = richParagraphs(h);
+    const originals = paragraphs.map((paragraph) => [...paragraph.childNodes]);
+    h.run();
+    await h.fontsReady();
+    await h.intersect();
+    if (end === 'dispose second wrapper')
+      h.context.stCathsTextReveal.dispose(paragraphs[1].parentElement);
+    if (end === 'second paragraph resize') {
+      paragraphs[1].clientWidth -= 50;
+      h.observers.filter((o) => o.type === 'resize').forEach((o) => o.callback());
+    }
+    if (end === 'reduced motion') {
+      h.media.matches = true;
+      [...h.motionListeners].forEach((fn) => fn());
+    }
+    assert.equal(h.tweens[0].killed, true);
+    paragraphs.forEach((paragraph, index) =>
+      assert.deepEqual(paragraph.childNodes, originals[index])
+    );
+    h.assertClean();
+  });
+}
+
+for (const boundary of ['different rich block', 'heading', 'opt-out', 'manual']) {
+  test(`rich text staggering respects ${boundary} boundary`, async () => {
+    const h = harness();
+    const { rich, paragraphs } = richParagraphs(h);
+    if (boundary === 'different rich block') {
+      const other = new h.Element('DIV', []);
+      other.setAttribute('class', 'w-richtext');
+      other.replaceChildren(paragraphs[1].parentElement);
+    } else if (boundary === 'heading') {
+      const heading = new h.Element('H2', [h.text('Heading')]);
+      rich.appendChild(heading);
+      h.targets.splice(1, 0, heading);
+    } else {
+      paragraphs[1].setAttribute(
+        boundary === 'manual' ? 'data-text-trigger' : 'data-text-reveal',
+        boundary === 'manual' ? 'manual' : 'off'
+      );
+    }
+    h.run();
+    assert.equal(
+      h.triggers.length,
+      boundary === 'heading' ? 3 : boundary === 'different rich block' ? 2 : 1
+    );
+    h.context.stCathsTextReveal.dispose();
+    h.assertClean();
+  });
+}
+
+test('empty split in a rich group never leaves later paragraphs mutated', async () => {
+  const h = harness({ emptySplit: true });
+  const { paragraphs } = richParagraphs(h);
+  const originals = paragraphs.map((paragraph) => [...paragraph.childNodes]);
+  h.run();
+  await h.fontsReady();
+  await h.intersect();
+  assert.equal(h.tweens.length, 0);
+  paragraphs.forEach((paragraph, index) =>
+    assert.deepEqual(paragraph.childNodes, originals[index])
+  );
+  h.assertClean();
+});
+
+test('a later paragraph split failure restores the entire rich text group', async () => {
+  const h = harness();
+  const { paragraphs } = richParagraphs(h);
+  const originals = paragraphs.map((paragraph) => [...paragraph.childNodes]);
+  paragraphs[1].failSplit = true;
+  h.run();
+  await h.fontsReady();
+  await h.intersect();
+  assert.equal(h.tweens.length, 0);
+  assert.equal(h.errors.length, 1);
+  paragraphs.forEach((paragraph, index) =>
+    assert.deepEqual(paragraph.childNodes, originals[index])
+  );
+  h.assertClean();
+});
+
+test('keyboard focus in the second rich paragraph restores its original link and the whole group', async () => {
+  const h = harness({ cloneLinks: true });
+  const { paragraphs } = richParagraphs(h);
+  const link = new h.Element('A', [h.text('Read more')]);
+  link.setAttribute('href', '/school');
+  paragraphs[1].replaceChildren(link);
+  h.run();
+  await h.fontsReady();
+  await h.intersect();
+  const clone = paragraphs[1].querySelector('a');
+  assert.notEqual(clone, link);
+  clone.focusVisible = true;
+  clone.focus();
+  assert.equal(h.context.document.activeElement, link);
+  assert.equal(paragraphs[1].childNodes[0], link);
+  assert.equal(paragraphs[0].childNodes[0], h.textNode);
+  assert.equal(h.tweens[0].killed, true);
   h.assertClean();
 });
