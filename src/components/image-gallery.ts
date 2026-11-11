@@ -2,7 +2,10 @@ const AUTOPLAY_INTERVAL = 7000;
 const supportsSiblingIndex = CSS.supports('z-index', 'sibling-index()');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
-document.querySelectorAll('[data-image-gallery]').forEach((gallery, galleryNumber) => {
+document.querySelectorAll('[data-image-gallery], [data-full-gallery]').forEach((gallery, galleryNumber) => {
+  const indexProperty = gallery.hasAttribute('data-full-gallery')
+    ? '--full-gallery-index'
+    : '--image-gallery-index';
   const slides = [...gallery.querySelectorAll('[data-gallery-slide]')].slice(0, 5);
   const controls = [...gallery.querySelectorAll<HTMLButtonElement>('[data-gallery-control]')];
   const pagination = gallery.querySelector('[data-gallery-pagination]');
@@ -33,7 +36,7 @@ document.querySelectorAll('[data-image-gallery]').forEach((gallery, galleryNumbe
     if (manual) manuallySelected = true;
     gallery.setAttribute('data-gallery-immediate', '');
     sync(index, manual);
-    getComputedStyle(gallery).getPropertyValue('--image-gallery-index');
+    getComputedStyle(gallery).getPropertyValue(indexProperty);
     requestAnimationFrame(() => gallery.removeAttribute('data-gallery-immediate'));
   }
 
@@ -61,8 +64,8 @@ document.querySelectorAll('[data-image-gallery]').forEach((gallery, galleryNumbe
   });
 
   gallery.addEventListener('transitionend', (event) => {
-    if (event.target !== gallery || event.propertyName !== '--image-gallery-index') return;
-    sync(Number(getComputedStyle(gallery).getPropertyValue('--image-gallery-index')));
+    if (event.target !== gallery || event.propertyName !== indexProperty) return;
+    sync(Number(getComputedStyle(gallery).getPropertyValue(indexProperty)));
   });
   sync(0);
 

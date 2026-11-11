@@ -34,7 +34,10 @@ function initComponents() {
 }
 
 function UIFunctions() {
-  window.conditionalLoadScript('[data-image-gallery]', 'components/image-gallery.js');
+  window.conditionalLoadScript(
+    '[data-image-gallery], [data-full-gallery]',
+    'components/image-gallery.js'
+  );
   window.conditionalLoadScript(
     '[data-history-timeline="component"]',
     'components/history-timeline.js'
